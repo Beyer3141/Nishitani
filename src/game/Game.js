@@ -1,8 +1,10 @@
 import { Player } from './Player';
 import { Bullet } from './Bullet';
 import { Enemy } from './Enemy';
+import { ZigZagEnemy, KamikazeEnemy } from './EnemyTypes';
 import { Boss } from './Boss';
 import { PowerUp } from './PowerUp';
+import { Particle, BackgroundStar } from './Particle';
 
 export class Game {
     constructor(canvas) {
@@ -14,11 +16,16 @@ export class Game {
         this.lastTime = 0;
         this.animationId = null;
 
+        // Visuals
+        this.particles = [];
+        this.stars = [];
+        this.createStars();
+
         // Game State
         this.gameState = 'START'; // START, PLAYING, BOSS_BATTLE, GAMEOVER
         this.score = 0;
         this.gameOver = false;
-        this.bossForced = false; // Flag to check if boss spawned at threshold
+        this.bossLevel = 0; // Track how many bosses defeated
 
         // Input
         this.keys = [];
@@ -65,6 +72,20 @@ export class Game {
         this.height = this.canvas.height;
         if (this.player) {
             this.player.y = this.height - this.player.height - 20;
+        }
+        this.createStars();
+    }
+
+    createStars() {
+        this.stars = [];
+        for (let i = 0; i < 100; i++) {
+            this.stars.push(new BackgroundStar(this));
+        }
+    }
+
+    createParticles(x, y, color, count) {
+        for (let i = 0; i < count; i++) {
+            this.particles.push(new Particle(this, x, y, color, 6));
         }
     }
 
@@ -145,11 +166,13 @@ export class Game {
             }
         });
 
-        // Boss Battle Logic
-        if (this.score >= 20 && !this.boss && !this.bossForced) {
+        // Boss Battle Logic - triggers at 20, 70, 120, etc.
+        const bossThreshold = 20 + this.bossLevel * 50;
+        if (this.score >= bossThreshold && !this.boss) {
             this.gameState = 'BOSS_BATTLE';
             this.boss = new Boss(this);
-            this.bossForced = true;
+            this.boss.maxHp = 50 + this.bossLevel * 25; // Stronger each time
+            this.boss.hp = this.boss.maxHp;
             this.enemies = []; // Clear small enemies
         }
 
@@ -164,11 +187,11 @@ export class Game {
                     if (this.boss.hp <= 0) {
                         // Boss Defeated
                         this.score += 50;
+                        this.createParticles(this.boss.x + this.boss.width / 2, this.boss.y + this.boss.height / 2, 'magenta', 60);
                         this.boss = null;
+                        this.bossLevel++;
                         this.gameState = 'PLAYING';
-                        this.bossForced = false; // Allow next boss at next threshold? Or just harder levels.
-                        // For now, simpler: loop threshold or just stay in playing hard mode
-                        this.enemyInterval = 500;
+                        this.enemyInterval = Math.max(300, 2000 - this.bossLevel * 200);
 
                         // Spawn PowerUp
                         this.powerUps.push(new PowerUp(this, this.width / 2, 0, 'DOUBLE'));
@@ -214,6 +237,7 @@ export class Game {
                         bullet.markedForDeletion = true;
                         enemy.markedForDeletion = true;
                         this.score++;
+                        this.createParticles(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, 'yellow', 15);
 
                         // Random PowerUp drop
                         if (Math.random() < 0.1) {
@@ -224,6 +248,11 @@ export class Game {
             });
             this.enemies = this.enemies.filter(enemy => !enemy.markedForDeletion);
         }
+
+        // Update stars and particles
+        this.stars.forEach(star => star.update());
+        this.particles.forEach(p => p.update());
+        this.particles = this.particles.filter(p => !p.markedForDeletion);
     }
 
     restart() {
@@ -235,7 +264,7 @@ export class Game {
         this.enemyBullets = [];
         this.powerUps = [];
         this.boss = null;
-        this.bossForced = false;
+        this.bossLevel = 0;
         this.player.x = this.width / 2 - this.player.width / 2;
         this.player.weaponLevel = 1;
         this.player.hasShield = false;
@@ -246,7 +275,15 @@ export class Game {
 
     addEnemy() {
         const x = Math.random() * (this.width - 60);
-        this.enemies.push(new Enemy(this, x, -60));
+        const rand = Math.random();
+        if (rand < 0.6) {
+            this.enemies.push(new Enemy(this, x, -60));
+        } else if (rand < 0.85) {
+            this.enemies.push(new ZigZagEnemy(this, x, -60));
+        } else {
+            // Kamikaze targets player's current position
+            this.enemies.push(new KamikazeEnemy(this, x, -60, this.player.x));
+        }
     }
 
     checkCollision(rect1, rect2) {
@@ -259,16 +296,28 @@ export class Game {
     }
 
     draw() {
-        this.ctx.fillStyle = 'black';
+        // Gradient background
+        const gradient = this.ctx.createLinearGradient(0, 0, 0, this.height);
+        gradient.addColorStop(0, '#0a0a1a');
+        gradient.addColorStop(1, '#1a1a3a');
+        this.ctx.fillStyle = gradient;
         this.ctx.fillRect(0, 0, this.width, this.height);
 
+        // Stars
+        this.stars.forEach(star => star.draw(this.ctx));
+
         if (this.gameState === 'START') {
+            this.ctx.save();
+            this.ctx.shadowBlur = 20;
+            this.ctx.shadowColor = 'cyan';
             this.ctx.fillStyle = 'white';
-            this.ctx.font = '40px Arial';
+            this.ctx.font = "32px 'Press Start 2P', monospace";
             this.ctx.textAlign = 'center';
-            this.ctx.fillText('フェイスインベーダー', this.width / 2, this.height / 2 - 40);
-            this.ctx.font = '20px Arial';
-            this.ctx.fillText('タップ または Enterキーでスタート', this.width / 2, this.height / 2 + 20);
+            this.ctx.fillText('FACE INVADERS', this.width / 2, this.height / 2 - 40);
+            this.ctx.font = "12px 'Press Start 2P', monospace";
+            this.ctx.shadowBlur = 0;
+            this.ctx.fillText('TAP OR PRESS ENTER', this.width / 2, this.height / 2 + 20);
+            this.ctx.restore();
             return;
         }
 
@@ -277,13 +326,18 @@ export class Game {
         this.enemies.forEach(enemy => enemy.draw(this.ctx));
         this.enemyBullets.forEach(bullet => bullet.draw(this.ctx));
         this.powerUps.forEach(p => p.draw(this.ctx));
+        this.particles.forEach(p => p.draw(this.ctx));
         if (this.boss) this.boss.draw(this.ctx);
 
-        // UI
-        this.ctx.fillStyle = 'white';
-        this.ctx.font = '20px Arial';
+        // UI with glow
+        this.ctx.save();
+        this.ctx.shadowBlur = 10;
+        this.ctx.shadowColor = 'lime';
+        this.ctx.fillStyle = 'lime';
+        this.ctx.font = "14px 'Press Start 2P', monospace";
         this.ctx.textAlign = 'left';
-        this.ctx.fillText('スコア: ' + this.score, 20, 30);
+        this.ctx.fillText('SCORE: ' + this.score, 20, 40);
+        this.ctx.restore();
 
         if (this.player.weaponLevel > 1) {
             this.ctx.fillText('武器: Lv.' + this.player.weaponLevel, 20, 60);
