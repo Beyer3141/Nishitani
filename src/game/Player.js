@@ -1,18 +1,57 @@
+// Ship configurations for selection
+export const SHIPS = {
+    speeder: {
+        name: 'スピーダー',
+        description: '高速移動・攻撃力低',
+        speed: 9,
+        fireRate: 1.0,
+        damage: 1,
+        color1: '#00ff88',
+        color2: '#00aa44',
+        hasShield: false
+    },
+    balanced: {
+        name: 'バランス',
+        description: '標準性能',
+        speed: 6,
+        fireRate: 1.0,
+        damage: 1,
+        color1: '#00d4ff',
+        color2: '#0088aa',
+        hasShield: false
+    },
+    tank: {
+        name: 'タンク',
+        description: '低速・高火力・初期シールド',
+        speed: 4,
+        fireRate: 0.8,
+        damage: 2,
+        color1: '#ff6600',
+        color2: '#aa4400',
+        hasShield: true
+    }
+};
+
 export class Player {
-    constructor(game) {
+    constructor(game, shipType = 'balanced') {
         this.game = game;
+        this.shipConfig = SHIPS[shipType] || SHIPS.balanced;
         this.width = 50;
         this.height = 50;
         this.x = game.width / 2 - this.width / 2;
         this.y = game.height - this.height - 20;
-        this.speed = 6;
+        this.speed = this.shipConfig.speed;
+        this.damage = this.shipConfig.damage;
         this.weaponLevel = 1;
-        this.hasShield = false;
+        this.maxWeaponLevel = 5;
+        this.hasShield = this.shipConfig.hasShield;
         this.fired = false;
         this.engineFlicker = 0;
+        this.fireTimer = 0;
+        this.fireDelay = 150 * this.shipConfig.fireRate; // ms between shots
     }
 
-    update(input) {
+    update(input, deltaTime) {
         // Horizontal Movement
         if (input.includes('ArrowLeft')) this.x -= this.speed;
         if (input.includes('ArrowRight')) this.x += this.speed;
@@ -23,23 +62,57 @@ export class Player {
 
         // Engine flicker animation
         this.engineFlicker = Math.random();
+
+        // Fire timer
+        if (this.fireTimer > 0) this.fireTimer -= deltaTime;
+    }
+
+    canShoot() {
+        return this.fireTimer <= 0;
     }
 
     shoot() {
+        if (!this.canShoot()) return;
+        this.fireTimer = this.fireDelay;
+
         const bulletY = this.y;
         const cx = this.x + this.width / 2;
 
         if (this.weaponLevel === 1) {
-            this.game.addBullet(cx - 2, bulletY);
+            this.game.addBullet(cx - 2, bulletY, 0, this.damage);
         } else if (this.weaponLevel === 2) {
-            this.game.addBullet(this.x + 5, bulletY);
-            this.game.addBullet(this.x + this.width - 9, bulletY);
-        } else if (this.weaponLevel >= 3) {
+            this.game.addBullet(this.x + 5, bulletY, 0, this.damage);
+            this.game.addBullet(this.x + this.width - 9, bulletY, 0, this.damage);
+        } else if (this.weaponLevel === 3) {
             // 3-way shot
-            this.game.addBullet(cx - 2, bulletY); // Center
-            this.game.addBullet(this.x, bulletY, -2); // Left angled
-            this.game.addBullet(this.x + this.width - 4, bulletY, 2); // Right angled
+            this.game.addBullet(cx - 2, bulletY, 0, this.damage);
+            this.game.addBullet(this.x, bulletY, -2, this.damage);
+            this.game.addBullet(this.x + this.width - 4, bulletY, 2, this.damage);
+        } else if (this.weaponLevel === 4) {
+            // 4-way + faster
+            this.game.addBullet(cx - 2, bulletY, 0, this.damage);
+            this.game.addBullet(this.x, bulletY, -2, this.damage);
+            this.game.addBullet(this.x + this.width - 4, bulletY, 2, this.damage);
+            this.game.addBullet(cx - 10, bulletY, -1, this.damage);
+            this.game.addBullet(cx + 6, bulletY, 1, this.damage);
+        } else if (this.weaponLevel >= 5) {
+            // 5-way + homing
+            this.game.addBullet(cx - 2, bulletY, 0, this.damage);
+            this.game.addBullet(this.x, bulletY, -2, this.damage);
+            this.game.addBullet(this.x + this.width - 4, bulletY, 2, this.damage);
+            this.game.addBullet(cx - 15, bulletY, -1, this.damage);
+            this.game.addBullet(cx + 11, bulletY, 1, this.damage);
+            // Homing bullet
+            this.game.addHomingBullet(cx, bulletY, this.damage * 2);
         }
+    }
+
+    upgradeWeapon() {
+        if (this.weaponLevel < this.maxWeaponLevel) {
+            this.weaponLevel++;
+            return true;
+        }
+        return false;
     }
 
     draw(ctx) {
@@ -62,23 +135,22 @@ export class Player {
         ctx.fill();
         ctx.restore();
 
-        // Ship body - sleek triangle
+        // Ship body
         ctx.save();
         ctx.shadowBlur = 15;
-        ctx.shadowColor = 'cyan';
+        ctx.shadowColor = this.shipConfig.color1;
 
-        // Main body gradient
         const bodyGradient = ctx.createLinearGradient(this.x, this.y, this.x + this.width, this.y + this.height);
-        bodyGradient.addColorStop(0, '#00d4ff');
-        bodyGradient.addColorStop(0.5, '#0088aa');
-        bodyGradient.addColorStop(1, '#005566');
+        bodyGradient.addColorStop(0, this.shipConfig.color1);
+        bodyGradient.addColorStop(0.5, this.shipConfig.color2);
+        bodyGradient.addColorStop(1, '#222');
         ctx.fillStyle = bodyGradient;
 
         ctx.beginPath();
-        ctx.moveTo(cx, this.y); // Top point
-        ctx.lineTo(this.x + this.width, this.y + this.height); // Bottom right
-        ctx.lineTo(cx, this.y + this.height * 0.7); // Inner bottom
-        ctx.lineTo(this.x, this.y + this.height); // Bottom left
+        ctx.moveTo(cx, this.y);
+        ctx.lineTo(this.x + this.width, this.y + this.height);
+        ctx.lineTo(cx, this.y + this.height * 0.7);
+        ctx.lineTo(this.x, this.y + this.height);
         ctx.closePath();
         ctx.fill();
 
@@ -103,10 +175,12 @@ export class Player {
         }
 
         // Weapon level indicator
-        if (this.weaponLevel > 1) {
-            ctx.fillStyle = 'lime';
-            ctx.font = "10px 'Press Start 2P', monospace";
-            ctx.fillText('Lv.' + this.weaponLevel, this.x, this.y - 5);
-        }
+        ctx.save();
+        ctx.fillStyle = 'lime';
+        ctx.shadowBlur = 5;
+        ctx.shadowColor = 'lime';
+        ctx.font = "10px 'Press Start 2P', monospace";
+        ctx.fillText('Lv.' + this.weaponLevel, this.x, this.y - 5);
+        ctx.restore();
     }
 }

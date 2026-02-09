@@ -5,7 +5,7 @@ export class PowerUp {
         this.y = y;
         this.width = 30;
         this.height = 30;
-        this.type = type; // 'DOUBLE', 'TRIPLE', 'SHIELD'
+        this.type = type; // 'POWER', 'SHIELD'
         this.speed = 2;
         this.markedForDeletion = false;
         this.angle = 0;
@@ -13,7 +13,7 @@ export class PowerUp {
 
     update() {
         this.y += this.speed;
-        this.angle += 0.05; // Rotation animation
+        this.angle += 0.05;
         if (this.y > this.game.height) this.markedForDeletion = true;
     }
 
@@ -22,17 +22,13 @@ export class PowerUp {
         ctx.translate(this.x, this.y);
         ctx.rotate(this.angle);
 
-        // Glow
         ctx.shadowBlur = 15;
-        if (this.type === 'DOUBLE') {
+        if (this.type === 'POWER') {
+            ctx.shadowColor = 'lime';
+            ctx.fillStyle = '#0f0';
+        } else {
             ctx.shadowColor = 'cyan';
             ctx.fillStyle = '#0ff';
-        } else if (this.type === 'TRIPLE') {
-            ctx.shadowColor = 'magenta';
-            ctx.fillStyle = '#f0f';
-        } else {
-            ctx.shadowColor = 'blue';
-            ctx.fillStyle = '#00f';
         }
 
         ctx.beginPath();
@@ -44,8 +40,7 @@ export class PowerUp {
         ctx.font = "bold 14px Arial";
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        const label = this.type === 'DOUBLE' ? '2' : this.type === 'TRIPLE' ? '3' : 'S';
-        ctx.fillText(label, 0, 0);
+        ctx.fillText(this.type === 'POWER' ? 'P' : 'S', 0, 0);
 
         ctx.restore();
     }
