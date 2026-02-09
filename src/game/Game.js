@@ -26,6 +26,16 @@ export class Game {
         this.score = 0;
         this.gameOver = false;
         this.bossLevel = 0; // Track how many bosses defeated
+        this.bossDefeatedCooldown = 0; // Prevent immediate re-spawn
+
+        // Combo System
+        this.combo = 0;
+        this.comboTimer = 0;
+        this.scorePopups = [];
+
+        // Screen Shake
+        this.shakeIntensity = 0;
+        this.shakeDuration = 0;
 
         // Input
         this.keys = [];
@@ -126,8 +136,13 @@ export class Game {
         }
     }
 
-    addBullet(x, y) {
-        this.bullets.push(new Bullet(this, x, y));
+    addBullet(x, y, vx = 0) {
+        this.bullets.push(new Bullet(this, x, y, vx));
+    }
+
+    shakeScreen(intensity, duration) {
+        this.shakeIntensity = intensity;
+        this.shakeDuration = duration;
     }
 
     update(deltaTime) {
@@ -161,19 +176,26 @@ export class Game {
         this.powerUps.forEach(p => {
             if (this.checkCollision(this.player, p)) {
                 p.markedForDeletion = true;
-                if (p.type === 'DOUBLE') this.player.weaponLevel = 2;
+                if (p.type === 'DOUBLE') this.player.weaponLevel = Math.max(this.player.weaponLevel, 2);
+                if (p.type === 'TRIPLE') this.player.weaponLevel = 3;
                 if (p.type === 'SHIELD') this.player.hasShield = true;
+                this.createParticles(p.x, p.y, 'cyan', 10);
             }
         });
 
         // Boss Battle Logic - triggers at 20, 70, 120, etc.
+        // Cooldown prevents immediate re-spawn after boss death
+        if (this.bossDefeatedCooldown > 0) {
+            this.bossDefeatedCooldown -= deltaTime;
+        }
         const bossThreshold = 20 + this.bossLevel * 50;
-        if (this.score >= bossThreshold && !this.boss) {
+        if (this.score >= bossThreshold && !this.boss && this.bossDefeatedCooldown <= 0) {
             this.gameState = 'BOSS_BATTLE';
             this.boss = new Boss(this);
             this.boss.maxHp = 50 + this.bossLevel * 25; // Stronger each time
             this.boss.hp = this.boss.maxHp;
             this.enemies = []; // Clear small enemies
+            this.shakeScreen(10, 500); // Screen shake on boss appear
         }
 
         if (this.gameState === 'BOSS_BATTLE' && this.boss) {
@@ -188,13 +210,16 @@ export class Game {
                         // Boss Defeated
                         this.score += 50;
                         this.createParticles(this.boss.x + this.boss.width / 2, this.boss.y + this.boss.height / 2, 'magenta', 60);
+                        this.shakeScreen(20, 800);
                         this.boss = null;
                         this.bossLevel++;
+                        this.bossDefeatedCooldown = 3000; // 3 second cooldown
                         this.gameState = 'PLAYING';
                         this.enemyInterval = Math.max(300, 2000 - this.bossLevel * 200);
 
-                        // Spawn PowerUp
-                        this.powerUps.push(new PowerUp(this, this.width / 2, 0, 'DOUBLE'));
+                        // Spawn PowerUp - upgrade to level 3 after second boss
+                        const powerType = this.bossLevel >= 2 ? 'TRIPLE' : 'DOUBLE';
+                        this.powerUps.push(new PowerUp(this, this.width / 2, 0, powerType));
                     }
                 }
             });
@@ -270,6 +295,12 @@ export class Game {
         this.player.hasShield = false;
         this.enemyInterval = 2000;
         this.enemyTimer = 0;
+        this.bossDefeatedCooldown = 0;
+        this.combo = 0;
+        this.comboTimer = 0;
+        this.scorePopups = [];
+        this.shakeIntensity = 0;
+        this.shakeDuration = 0;
         this.lastTime = performance.now();
     }
 
@@ -296,6 +327,16 @@ export class Game {
     }
 
     draw() {
+        this.ctx.save();
+
+        // Screen shake effect
+        if (this.shakeDuration > 0) {
+            const shakeX = (Math.random() - 0.5) * this.shakeIntensity;
+            const shakeY = (Math.random() - 0.5) * this.shakeIntensity;
+            this.ctx.translate(shakeX, shakeY);
+            this.shakeDuration -= 16; // Approximate frame time
+        }
+
         // Gradient background
         const gradient = this.ctx.createLinearGradient(0, 0, 0, this.height);
         gradient.addColorStop(0, '#0a0a1a');
@@ -369,6 +410,8 @@ export class Game {
                 this.restart();
             }
         }
+
+        this.ctx.restore(); // Close screen shake save/restore
     }
 
     loop(currentTime) {
