@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', system-ui, sans-serif;
+}
+
+body {
+  @apply bg-gray-900 text-white overflow-hidden touch-none;
+  font-family: var(--font-sans);
+}
