@@ -23,8 +23,19 @@ export default function GameCanvas() {
 
     const handleTouchStart = (action) => {
         if (gameRef.current) {
-            if (gameRef.current.gameState === 'GAMEOVER') {
+            const state = gameRef.current.gameState;
+            if (state === 'GAMEOVER') {
                 gameRef.current.restart();
+            } else if (state === 'START' && action === 'fire') {
+                gameRef.current.input.injectKey('Enter', true);
+                setTimeout(() => gameRef.current?.input.injectKey('Enter', false), 100);
+            } else if (state === 'SHIP_SELECT') {
+                const keyMap = { left: 'ArrowLeft', right: 'ArrowRight', fire: 'Enter' };
+                const key = keyMap[action];
+                if (key) {
+                    gameRef.current.input.injectKey(key, true);
+                    setTimeout(() => gameRef.current?.input.injectKey(key, false), 100);
+                }
             } else {
                 gameRef.current.setTouchInput(action, true);
             }
