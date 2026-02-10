@@ -19,9 +19,9 @@ export class ShopManager {
         this.nishitaniBreakerPurchased = false;
     }
 
-    isAllMaxed() {
+    isAnyMaxed() {
         const upgradeIds = ['weaponUp', 'speed', 'damage'];
-        return upgradeIds.every(id => {
+        return upgradeIds.some(id => {
             const item = this.items.find(it => it.id === id);
             return item && (this.purchaseHistory[id] || 0) >= item.max;
         });
@@ -40,8 +40,8 @@ export class ShopManager {
             };
         });
 
-        // Add NISHITANI BREAKER if all core upgrades maxed
-        if (this.isAllMaxed() && !this.nishitaniBreakerPurchased) {
+        // Add NISHITANI BREAKER if any core upgrade is maxed
+        if (this.isAnyMaxed() && !this.nishitaniBreakerPurchased) {
             if (!this.nishitaniBreakerUnlocked) {
                 this.nishitaniBreakerUnlocked = true;
             }

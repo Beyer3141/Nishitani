@@ -448,6 +448,12 @@ export class Game {
             return;
         }
 
+        // Pause all gameplay while dialogue is active and blocking
+        if (this.dialogue.active && this.dialogue.blocking) {
+            input.clearFrame();
+            return;
+        }
+
         // Timers
         if (this.invincibleTimer > 0) this.invincibleTimer -= deltaTime;
         if (this.comboTimer > 0) {

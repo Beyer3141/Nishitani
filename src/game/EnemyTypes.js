@@ -136,8 +136,8 @@ export class TankEnemy extends Enemy {
     constructor(game, x, y) {
         super(game, x, y);
         this.type = 'tank';
-        this.width = 80;
-        this.height = 80;
+        this.width = 55;
+        this.height = 55;
         this.hp = 8;
         this.maxHp = 8;
         this.scoreValue = 10;
@@ -164,8 +164,8 @@ export class SwarmEnemy extends Enemy {
     constructor(game, x, y) {
         super(game, x, y);
         this.type = 'swarm';
-        this.width = 35;
-        this.height = 35;
+        this.width = 25;
+        this.height = 25;
         this.hp = 1;
         this.maxHp = 1;
         this.scoreValue = 1;
@@ -225,8 +225,8 @@ export class MeishiEnemy extends Enemy {
     constructor(game, x, y) {
         super(game, x, y);
         this.type = 'meishi';
-        this.width = 70;
-        this.height = 40;
+        this.width = 50;
+        this.height = 28;
         this.hp = 2;
         this.maxHp = 2;
         this.scoreValue = 4;
@@ -315,8 +315,8 @@ export class CloneEnemy extends Enemy {
         super(game, x, y);
         this.type = 'clone';
         this.isSmall = isSmall;
-        this.width = isSmall ? 35 : 55;
-        this.height = isSmall ? 35 : 55;
+        this.width = isSmall ? 25 : 38;
+        this.height = isSmall ? 25 : 38;
         this.hp = isSmall ? 1 : 3;
         this.maxHp = this.hp;
         this.scoreValue = isSmall ? 2 : 5;

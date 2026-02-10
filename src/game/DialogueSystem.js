@@ -144,7 +144,7 @@ export class DialogueSystem {
         // ---- Layout calculations ----
         const margin = Math.max(8, W * 0.03);
         const boxHeight = Math.max(130, H * 0.28);
-        const boxY = H - boxHeight - margin;
+        const boxY = margin; // Position at top of screen to avoid overlap with controls on mobile
         const boxX = margin;
         const boxW = W - margin * 2;
 
@@ -185,26 +185,26 @@ export class DialogueSystem {
 
         ctx.shadowBlur = 0;
 
-        // ---- Speaker name tab ----
+        // ---- Speaker name tab (positioned at bottom-left of box) ----
         const speaker = this.currentDialogue.speaker;
         if (speaker) {
             ctx.font = "bold 11px 'Press Start 2P', monospace";
             const nameWidth = ctx.measureText(speaker).width + 24;
             const nameTabH = 24;
             const nameTabX = boxX + 16;
-            const nameTabY = boxY - nameTabH + 4;
+            const nameTabY = boxY + boxHeight - 4;
 
             // Name tab background
-            this._drawRoundedRectTop(ctx, nameTabX, nameTabY, nameWidth, nameTabH + 4, 6);
+            this._drawRoundedRectBottom(ctx, nameTabX, nameTabY, nameWidth, nameTabH + 4, 6);
             ctx.fillStyle = 'rgba(10, 10, 35, 0.92)';
             ctx.fill();
             ctx.strokeStyle = 'rgba(140, 180, 255, 0.7)';
             ctx.lineWidth = 2.5;
             ctx.stroke();
 
-            // Cover the bottom border where tab meets box
+            // Cover the top border where tab meets box
             ctx.fillStyle = 'rgba(10, 10, 35, 0.92)';
-            ctx.fillRect(nameTabX + 1, boxY - 1, nameWidth - 2, 6);
+            ctx.fillRect(nameTabX + 1, nameTabY - 2, nameWidth - 2, 6);
 
             // Speaker name text
             ctx.fillStyle = '#ffdd44';
@@ -324,6 +324,20 @@ export class DialogueSystem {
         ctx.lineTo(x, y + h);
         ctx.lineTo(x, y + r);
         ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
+    }
+
+    /**
+     * Draw rounded rectangle with only bottom corners rounded (for name tab below box)
+     */
+    _drawRoundedRectBottom(ctx, x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + w, y);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        ctx.lineTo(x + r, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
         ctx.closePath();
     }
 

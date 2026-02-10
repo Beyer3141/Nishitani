@@ -95,7 +95,7 @@ export const SHIPS = {
     },
 };
 
-// NISHITANI BREAKER - ultimate ship, unlocked after maxing all shop upgrades
+// NISHITANI BREAKER - ultimate ship, unlocked when any stat (weapon/speed/damage) reaches MAX
 export const NISHITANI_BREAKER = {
     name: 'NISHITANI BREAKER',
     description: 'ALL MAX  全兵装搭載  最終決戦兵器',
@@ -124,8 +124,8 @@ export class Player {
             this.shipConfig = SHIPS[shipType] || SHIPS.balanced;
         }
 
-        this.width = 50;
-        this.height = 50;
+        this.width = 35;
+        this.height = 35;
         this.x = game.width / 2 - this.width / 2;
         this.y = game.playAreaBottom - this.height - 10;
         this.speed = this.shipConfig.speed;
