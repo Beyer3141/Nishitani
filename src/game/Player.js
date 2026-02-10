@@ -2,20 +2,26 @@ export const WEAPON_PATHS = {
     spread: { name: '拡散', color: '#00ff88' },
     rapid: { name: '連射', color: '#ffaa00' },
     heavy: { name: '重火力', color: '#ff4444' },
+    beam: { name: '光線', color: '#ff00ff' },
+    all: { name: '全兵装', color: '#ffdd00' },
 };
 
+// Evolution tiers: base → Mk-II → Mk-III (at weapon lv 10, 20)
+// Each ship is PEAKY - extreme in one area, weak in another
 export const SHIPS = {
     speeder: {
         name: 'スピーダー',
-        description: 'SPD 9  ATK 1  ダッシュ',
-        speed: 9,
+        description: 'SPD MAX  ATK 低  ダッシュ',
+        speed: 11,
         fireRate: 1.0,
-        damage: 1,
+        damage: 0.5,
         color1: '#00ff88',
         color2: '#00aa44',
         weaponPath: 'rapid',
         special: 'dash',
         specialDesc: 'ダッシュ(無敵移動)',
+        evolution: ['スピーダー', 'スピーダー Mk-II', 'ライトニング'],
+        trait: 'speed',
     },
     balanced: {
         name: 'バランス',
@@ -28,22 +34,26 @@ export const SHIPS = {
         weaponPath: 'spread',
         special: 'bombBoost',
         specialDesc: 'ボム拡大(範囲2倍)',
+        evolution: ['バランス', 'バランス Mk-II', 'ヴァンガード'],
+        trait: 'balanced',
     },
     tank: {
         name: 'タンク',
-        description: 'SPD 4  ATK 2  チャージショット',
-        speed: 4,
-        fireRate: 0.8,
-        damage: 2,
+        description: 'SPD 極低  ATK MAX  チャージ',
+        speed: 2.5,
+        fireRate: 0.6,
+        damage: 3,
         color1: '#ff6600',
         color2: '#aa4400',
         weaponPath: 'heavy',
         special: 'chargeShot',
         specialDesc: 'チャージショット',
+        evolution: ['タンク', 'タンク Mk-II', 'デストロイヤー'],
+        trait: 'power',
     },
     interceptor: {
         name: 'インターセプター',
-        description: 'SPD 11  ATK 1  ホーミングバースト',
+        description: 'SPD 11  ATK 1  ホーミング',
         speed: 11,
         fireRate: 1.2,
         damage: 1,
@@ -52,22 +62,26 @@ export const SHIPS = {
         weaponPath: 'rapid',
         special: 'homingBurst',
         specialDesc: 'ホーミングバースト',
+        evolution: ['インターセプター', 'インターセプター Mk-II', 'ファルコン'],
+        trait: 'homing',
     },
     fortress: {
         name: 'フォートレス',
-        description: 'SPD 2.5  ATK 3  フォースフィールド',
-        speed: 2.5,
-        fireRate: 0.6,
+        description: 'SPD 極低  ATK 3  鉄壁',
+        speed: 2,
+        fireRate: 0.5,
         damage: 3,
         color1: '#ffdd00',
         color2: '#aa8800',
         weaponPath: 'heavy',
         special: 'forceField',
         specialDesc: 'フォースフィールド',
+        evolution: ['フォートレス', 'フォートレス Mk-II', 'アイアンウォール'],
+        trait: 'defense',
     },
     phantom: {
         name: 'ファントム',
-        description: 'SPD 7  ATK 1  テレポート',
+        description: 'SPD 7  ATK 1  テレポ+回避特化',
         speed: 7,
         fireRate: 1.0,
         damage: 1,
@@ -76,7 +90,25 @@ export const SHIPS = {
         weaponPath: 'spread',
         special: 'teleport',
         specialDesc: 'テレポート',
+        evolution: ['ファントム', 'ファントム Mk-II', 'シャドウ'],
+        trait: 'evasion',
     },
+};
+
+// NISHITANI BREAKER - ultimate ship, unlocked after maxing all shop upgrades
+export const NISHITANI_BREAKER = {
+    name: 'NISHITANI BREAKER',
+    description: 'ALL MAX  全兵装搭載  最終決戦兵器',
+    speed: 8,
+    fireRate: 0.8,
+    damage: 3,
+    color1: '#ffdd00',
+    color2: '#ff4400',
+    weaponPath: 'all',
+    special: 'nishitaniBreak',
+    specialDesc: 'ニシタニブレイク',
+    evolution: ['NISHITANI BREAKER', 'N-BREAKER EX', 'N-BREAKER OMEGA'],
+    trait: 'ultimate',
 };
 
 export const SHIP_KEYS = ['speeder', 'balanced', 'tank', 'interceptor', 'fortress', 'phantom'];
@@ -85,7 +117,13 @@ export class Player {
     constructor(game, shipType = 'balanced') {
         this.game = game;
         this.shipType = shipType;
-        this.shipConfig = SHIPS[shipType] || SHIPS.balanced;
+
+        if (shipType === 'nishitaniBreaker') {
+            this.shipConfig = NISHITANI_BREAKER;
+        } else {
+            this.shipConfig = SHIPS[shipType] || SHIPS.balanced;
+        }
+
         this.width = 50;
         this.height = 50;
         this.x = game.width / 2 - this.width / 2;
@@ -95,7 +133,7 @@ export class Player {
         this.damage = this.shipConfig.damage;
         this.baseDamage = this.shipConfig.damage;
         this.weaponLevel = 1;
-        this.maxWeaponLevel = 5;
+        this.maxWeaponLevel = 30;
         this.weaponPath = this.shipConfig.weaponPath;
         this.hasShield = false;
         this.fired = false;
@@ -128,17 +166,30 @@ export class Player {
         this.forceFieldActive = false;
         this.forceFieldTimer = 0;
 
-        // Speed/damage shop upgrades
+        // Speed/damage shop upgrades (max 30 each)
         this.speedBonus = 0;
         this.damageBonus = 0;
     }
 
+    // Evolution tier based on weapon level
+    get evolutionTier() {
+        if (this.weaponLevel >= 20) return 2;
+        if (this.weaponLevel >= 10) return 1;
+        return 0;
+    }
+
+    get evolutionName() {
+        const evos = this.shipConfig.evolution;
+        if (!evos) return this.shipConfig.name;
+        return evos[this.evolutionTier] || evos[0];
+    }
+
     get effectiveSpeed() {
-        return this.baseSpeed + this.speedBonus + (this.dashing ? 15 : 0);
+        return this.baseSpeed + this.speedBonus * 0.3 + (this.dashing ? 15 : 0);
     }
 
     get effectiveDamage() {
-        return this.baseDamage + this.damageBonus;
+        return this.baseDamage + this.damageBonus * 0.15;
     }
 
     update(input, deltaTime) {
@@ -184,7 +235,10 @@ export class Player {
         const bulletY = this.y;
         const dmg = this.effectiveDamage;
 
-        if (this.weaponPath === 'spread') {
+        // NISHITANI BREAKER uses all weapon types
+        if (this.weaponPath === 'all') {
+            this._shootAll(cx, bulletY, dmg);
+        } else if (this.weaponPath === 'spread') {
             this._shootSpread(cx, bulletY, dmg);
         } else if (this.weaponPath === 'rapid') {
             this._shootRapid(cx, bulletY, dmg);
@@ -199,81 +253,88 @@ export class Player {
 
     _shootSpread(cx, bulletY, dmg) {
         const lv = this.weaponLevel;
-        if (lv === 1) {
+        // Gradual spread increase: more bullets, wider angles
+        const bulletCount = Math.min(1 + Math.floor(lv / 3), 11);
+        const maxAngle = Math.min(1.5 + lv * 0.15, 5);
+
+        if (bulletCount === 1) {
             this.game.addBullet(cx - 2, bulletY, 0, dmg);
-        } else if (lv === 2) {
-            this.game.addBullet(cx - 2, bulletY, 0, dmg);
-            this.game.addBullet(cx - 10, bulletY, -1.5, dmg);
-            this.game.addBullet(cx + 6, bulletY, 1.5, dmg);
-        } else if (lv === 3) {
-            this.game.addBullet(cx - 2, bulletY, 0, dmg);
-            this.game.addBullet(cx - 10, bulletY, -2, dmg);
-            this.game.addBullet(cx + 6, bulletY, 2, dmg);
-            this.game.addBullet(cx - 15, bulletY, -3.5, dmg);
-            this.game.addBullet(cx + 11, bulletY, 3.5, dmg);
-        } else if (lv === 4) {
-            for (let i = -3; i <= 3; i++) {
-                this.game.addBullet(cx + i * 5, bulletY, i * 1.2, dmg);
-            }
         } else {
-            for (let i = -3; i <= 3; i++) {
-                this.game.addBullet(cx + i * 5, bulletY, i * 1.2, dmg);
+            for (let i = 0; i < bulletCount; i++) {
+                const t = bulletCount === 1 ? 0 : i / (bulletCount - 1);
+                const vx = -maxAngle + t * maxAngle * 2;
+                this.game.addBullet(cx + i * 3 - bulletCount * 1.5, bulletY, vx, dmg);
             }
+        }
+        // Homing at lv15+
+        if (lv >= 15) {
             this.game.addHomingBullet(cx, bulletY, dmg * 2);
+        }
+        if (lv >= 25) {
+            this.game.addHomingBullet(cx - 10, bulletY, dmg * 2);
+            this.game.addHomingBullet(cx + 10, bulletY, dmg * 2);
         }
     }
 
     _shootRapid(cx, bulletY, dmg) {
         const lv = this.weaponLevel;
-        this.fireDelay = Math.max(40, 100 - lv * 12);
-        if (lv === 1) {
-            this.game.addBullet(cx - 2, bulletY, 0, dmg);
-        } else if (lv === 2) {
-            this.game.addBullet(this.x + 5, bulletY, 0, dmg);
-            this.game.addBullet(this.x + this.width - 9, bulletY, 0, dmg);
-        } else if (lv === 3) {
-            this.game.addBullet(cx - 2, bulletY, 0, dmg);
-            this.game.addBullet(this.x + 3, bulletY, -0.5, dmg);
-            this.game.addBullet(this.x + this.width - 7, bulletY, 0.5, dmg);
-        } else if (lv === 4) {
-            this.game.addBullet(cx - 2, bulletY, 0, dmg);
-            this.game.addBullet(this.x + 3, bulletY, -0.5, dmg);
-            this.game.addBullet(this.x + this.width - 7, bulletY, 0.5, dmg);
-            this.game.addBullet(cx - 2, bulletY + 10, 0, dmg);
-        } else {
-            this.game.addBullet(cx - 2, bulletY, 0, dmg);
-            this.game.addBullet(this.x + 3, bulletY, -1, dmg);
-            this.game.addBullet(this.x + this.width - 7, bulletY, 1, dmg);
+        this.fireDelay = Math.max(30, 120 - lv * 3);
+        const streams = Math.min(1 + Math.floor(lv / 5), 5);
+        const spreadW = streams * 8;
+
+        for (let i = 0; i < streams; i++) {
+            const sx = cx - spreadW / 2 + (spreadW / Math.max(1, streams - 1)) * i;
+            const vx = streams > 1 ? (i / (streams - 1) - 0.5) * 1.5 : 0;
+            this.game.addBullet(sx, bulletY, vx, dmg);
+        }
+        if (lv >= 20) {
             this.game.addHomingBullet(cx, bulletY, dmg * 2);
         }
     }
 
     _shootHeavy(cx, bulletY, dmg) {
         const lv = this.weaponLevel;
-        this.fireDelay = 250 * this.shipConfig.fireRate;
-        if (lv === 1) {
-            this.game.addHeavyBullet(cx - 4, bulletY, 0, dmg * 2);
-        } else if (lv === 2) {
-            this.game.addHeavyBullet(cx - 4, bulletY, 0, dmg * 2);
-            this.game.addBullet(this.x + 3, bulletY, -1, dmg);
-            this.game.addBullet(this.x + this.width - 7, bulletY, 1, dmg);
-        } else if (lv === 3) {
-            this.game.addHeavyBullet(cx - 10, bulletY, -0.3, dmg * 2);
-            this.game.addHeavyBullet(cx + 2, bulletY, 0.3, dmg * 2);
-            this.game.addBullet(cx - 2, bulletY, 0, dmg);
-        } else if (lv === 4) {
-            this.game.addHeavyBullet(cx - 10, bulletY, -0.3, dmg * 3);
-            this.game.addHeavyBullet(cx + 2, bulletY, 0.3, dmg * 3);
-            this.game.addBullet(this.x, bulletY, -1.5, dmg);
-            this.game.addBullet(this.x + this.width - 4, bulletY, 1.5, dmg);
-        } else {
-            this.game.addHeavyBullet(cx - 10, bulletY, -0.3, dmg * 3, true);
-            this.game.addHeavyBullet(cx + 2, bulletY, 0.3, dmg * 3, true);
-            this.game.addBullet(this.x, bulletY, -1.5, dmg);
-            this.game.addBullet(this.x + this.width - 4, bulletY, 1.5, dmg);
+        this.fireDelay = Math.max(150, 300 - lv * 4) * this.shipConfig.fireRate;
+        const heavyCount = Math.min(1 + Math.floor(lv / 8), 4);
+        const isPiercing = lv >= 15;
+        const heavyDmg = dmg * (2 + Math.floor(lv / 10));
+
+        for (let i = 0; i < heavyCount; i++) {
+            const offset = (i - (heavyCount - 1) / 2) * 14;
+            const vx = (i - (heavyCount - 1) / 2) * 0.3;
+            this.game.addHeavyBullet(cx + offset - 4, bulletY, vx, heavyDmg, isPiercing);
+        }
+        // Side bullets
+        if (lv >= 5) {
+            this.game.addBullet(this.x + 3, bulletY, -1.5, dmg);
+            this.game.addBullet(this.x + this.width - 7, bulletY, 1.5, dmg);
+        }
+        if (lv >= 25) {
             this.game.addHomingBullet(cx, bulletY, dmg * 3);
         }
         this.game.sound.playHeavyShoot();
+    }
+
+    _shootAll(cx, bulletY, dmg) {
+        const lv = this.weaponLevel;
+        this.fireDelay = Math.max(50, 100 - lv * 2);
+
+        // Spread fan
+        const fanCount = Math.min(3 + Math.floor(lv / 5), 9);
+        for (let i = 0; i < fanCount; i++) {
+            const vx = (i / (fanCount - 1) - 0.5) * 4;
+            this.game.addBullet(cx + (i - fanCount / 2) * 4, bulletY, vx, dmg);
+        }
+        // Heavy center
+        if (lv >= 5) {
+            this.game.addHeavyBullet(cx - 4, bulletY, 0, dmg * 3, lv >= 15);
+        }
+        // Homing
+        if (lv >= 10) {
+            this.game.addHomingBullet(cx - 15, bulletY, dmg * 2);
+            this.game.addHomingBullet(cx + 15, bulletY, dmg * 2);
+        }
+        this.game.sound.playShoot();
     }
 
     useSpecial() {
@@ -316,6 +377,20 @@ export class Player {
                 this.game.createParticles(this.x + this.width / 2, this.y + this.height / 2, '#8844ff', 20);
                 this.game.invincibleTimer = 1000;
                 return true;
+            case 'nishitaniBreak': {
+                // Ultimate: bomb + homing burst + force field
+                const cx3 = this.x + this.width / 2;
+                this.game.useBomb();
+                for (let i = 0; i < 12; i++) {
+                    this.game.addHomingBullet(cx3, this.y, this.effectiveDamage * 3);
+                }
+                this.forceFieldActive = true;
+                this.forceFieldTimer = 2000;
+                this.game.shakeScreen(15, 500);
+                this.game.flashScreen('rgba(255, 255, 0, 0.3)', 300);
+                this.game.addScorePopup(cx3, this.y - 30, 'NISHITANI BREAK!', '#ffdd00');
+                return true;
+            }
             default:
                 return false;
         }
@@ -340,21 +415,39 @@ export class Player {
     draw(ctx) {
         const cx = this.x + this.width / 2;
         const cy = this.y + this.height / 2;
+        const tier = this.evolutionTier;
 
-        // Engine flame
+        // Engine flame (bigger at higher tiers)
         ctx.save();
-        const flameHeight = 15 + this.engineFlicker * 10;
-        const gradient = ctx.createLinearGradient(cx, this.y + this.height, cx, this.y + this.height + flameHeight);
-        gradient.addColorStop(0, 'yellow');
-        gradient.addColorStop(0.5, 'orange');
+        const flameH = 15 + this.engineFlicker * 10 + tier * 5;
+        const flameW = 10 + tier * 4;
+        const gradient = ctx.createLinearGradient(cx, this.y + this.height, cx, this.y + this.height + flameH);
+        gradient.addColorStop(0, tier >= 2 ? '#00ffff' : 'yellow');
+        gradient.addColorStop(0.5, tier >= 2 ? '#0088ff' : 'orange');
         gradient.addColorStop(1, 'transparent');
         ctx.fillStyle = gradient;
         ctx.beginPath();
-        ctx.moveTo(cx - 10, this.y + this.height);
-        ctx.lineTo(cx + 10, this.y + this.height);
-        ctx.lineTo(cx, this.y + this.height + flameHeight);
+        ctx.moveTo(cx - flameW, this.y + this.height);
+        ctx.lineTo(cx + flameW, this.y + this.height);
+        ctx.lineTo(cx, this.y + this.height + flameH);
         ctx.closePath();
         ctx.fill();
+        // Side thrusters at tier 2
+        if (tier >= 2) {
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.moveTo(this.x + 5, this.y + this.height - 5);
+            ctx.lineTo(this.x + 12, this.y + this.height - 5);
+            ctx.lineTo(this.x + 8, this.y + this.height + flameH * 0.5);
+            ctx.closePath();
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(this.x + this.width - 12, this.y + this.height - 5);
+            ctx.lineTo(this.x + this.width - 5, this.y + this.height - 5);
+            ctx.lineTo(this.x + this.width - 8, this.y + this.height + flameH * 0.5);
+            ctx.closePath();
+            ctx.fill();
+        }
         ctx.restore();
 
         if (this.dashing) {
@@ -365,9 +458,9 @@ export class Player {
             ctx.restore();
         }
 
-        // Ship body
+        // Ship body - evolves with tier
         ctx.save();
-        ctx.shadowBlur = 15;
+        ctx.shadowBlur = 15 + tier * 5;
         ctx.shadowColor = this.shipConfig.color1;
 
         const bodyGradient = ctx.createLinearGradient(this.x, this.y, this.x + this.width, this.y + this.height);
@@ -376,20 +469,91 @@ export class Player {
         bodyGradient.addColorStop(1, '#222');
         ctx.fillStyle = bodyGradient;
 
-        ctx.beginPath();
-        ctx.moveTo(cx, this.y);
-        ctx.lineTo(this.x + this.width, this.y + this.height);
-        ctx.lineTo(cx, this.y + this.height * 0.7);
-        ctx.lineTo(this.x, this.y + this.height);
-        ctx.closePath();
-        ctx.fill();
+        if (tier === 0) {
+            // Basic triangle
+            ctx.beginPath();
+            ctx.moveTo(cx, this.y);
+            ctx.lineTo(this.x + this.width, this.y + this.height);
+            ctx.lineTo(cx, this.y + this.height * 0.7);
+            ctx.lineTo(this.x, this.y + this.height);
+            ctx.closePath();
+            ctx.fill();
+        } else if (tier === 1) {
+            // Mk-II: swept wings + fin
+            ctx.beginPath();
+            ctx.moveTo(cx, this.y - 4);
+            ctx.lineTo(this.x + this.width + 5, this.y + this.height * 0.9);
+            ctx.lineTo(this.x + this.width - 5, this.y + this.height);
+            ctx.lineTo(cx, this.y + this.height * 0.6);
+            ctx.lineTo(this.x + 5, this.y + this.height);
+            ctx.lineTo(this.x - 5, this.y + this.height * 0.9);
+            ctx.closePath();
+            ctx.fill();
+            // Dorsal fin
+            ctx.fillStyle = this.shipConfig.color1;
+            ctx.beginPath();
+            ctx.moveTo(cx, this.y - 4);
+            ctx.lineTo(cx + 3, this.y + 20);
+            ctx.lineTo(cx - 3, this.y + 20);
+            ctx.closePath();
+            ctx.fill();
+        } else {
+            // Tier 2: aggressive angular body with wing hardpoints
+            ctx.beginPath();
+            ctx.moveTo(cx, this.y - 8);
+            ctx.lineTo(this.x + this.width + 10, this.y + this.height * 0.85);
+            ctx.lineTo(this.x + this.width, this.y + this.height);
+            ctx.lineTo(cx + 8, this.y + this.height * 0.55);
+            ctx.lineTo(cx, this.y + this.height * 0.6);
+            ctx.lineTo(cx - 8, this.y + this.height * 0.55);
+            ctx.lineTo(this.x, this.y + this.height);
+            ctx.lineTo(this.x - 10, this.y + this.height * 0.85);
+            ctx.closePath();
+            ctx.fill();
 
-        ctx.fillStyle = '#aaeeff';
+            // Wing hardpoints (glowing dots)
+            ctx.fillStyle = '#ffffff';
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(this.x - 5, this.y + this.height * 0.87, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(this.x + this.width + 5, this.y + this.height * 0.87, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Cockpit glow
+        ctx.fillStyle = tier >= 2 ? '#ffffff' : '#aaeeff';
+        ctx.shadowBlur = tier >= 2 ? 15 : 5;
+        ctx.shadowColor = tier >= 2 ? '#00ffff' : '#aaeeff';
         ctx.beginPath();
-        ctx.ellipse(cx, this.y + 20, 8, 12, 0, 0, Math.PI * 2);
+        const cockpitH = tier >= 1 ? 14 : 12;
+        ctx.ellipse(cx, this.y + 18 - tier * 2, 6 + tier * 2, cockpitH, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
 
+        // NISHITANI BREAKER special glow
+        if (this.shipType === 'nishitaniBreaker') {
+            ctx.save();
+            const pulse = Math.sin(performance.now() / 200) * 0.3 + 0.5;
+            ctx.globalAlpha = pulse;
+            ctx.strokeStyle = '#ffdd00';
+            ctx.lineWidth = 2;
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = '#ffdd00';
+            ctx.beginPath();
+            ctx.arc(cx, cy, 35, 0, Math.PI * 2);
+            ctx.stroke();
+            // "N" emblem
+            ctx.fillStyle = '#ffdd00';
+            ctx.font = "bold 10px 'Press Start 2P', monospace";
+            ctx.textAlign = 'center';
+            ctx.fillText('N', cx, this.y + this.height + 15);
+            ctx.restore();
+        }
+
+        // Shield
         if (this.hasShield) {
             ctx.save();
             ctx.strokeStyle = 'cyan';
@@ -402,6 +566,7 @@ export class Player {
             ctx.restore();
         }
 
+        // Force field
         if (this.forceFieldActive) {
             ctx.save();
             const pulse = Math.sin(performance.now() / 100) * 0.2 + 0.5;
@@ -416,12 +581,14 @@ export class Player {
             ctx.restore();
         }
 
+        // Weapon level + evolution name
         ctx.save();
-        ctx.fillStyle = WEAPON_PATHS[this.weaponPath].color;
+        ctx.fillStyle = WEAPON_PATHS[this.weaponPath] ? WEAPON_PATHS[this.weaponPath].color : '#fff';
         ctx.shadowBlur = 5;
-        ctx.shadowColor = WEAPON_PATHS[this.weaponPath].color;
-        ctx.font = "10px 'Press Start 2P', monospace";
-        ctx.fillText('Lv.' + this.weaponLevel, this.x, this.y - 5);
+        ctx.shadowColor = ctx.fillStyle;
+        ctx.font = "8px 'Press Start 2P', monospace";
+        ctx.textAlign = 'center';
+        ctx.fillText('Lv.' + this.weaponLevel, cx, this.y - 5);
         ctx.restore();
     }
 }

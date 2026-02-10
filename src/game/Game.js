@@ -10,6 +10,8 @@ import { createBoss } from './BossTypes';
 import { GrazeMechanic } from './GrazeMechanic';
 import { HUD } from './HUD';
 import { ShopManager } from './ShopManager';
+import { DialogueSystem } from './DialogueSystem';
+import { getStageForWave, getMaxWave } from './StageData';
 
 // States: START, SHIP_SELECT, PLAYING, BOSS_INTRO, BOSS_BATTLE, WAVE_CLEAR, SHOP, GAMEOVER, PAUSED
 export class Game {
@@ -31,6 +33,7 @@ export class Game {
         this.graze = new GrazeMechanic(this);
         this.hud = new HUD(this);
         this.shop = new ShopManager(this);
+        this.dialogue = new DialogueSystem(this);
 
         // Particles
         this.particles = [];
@@ -118,7 +121,7 @@ export class Game {
                 }
             }
 
-            if (this.gameState === 'GAMEOVER') {
+            if (this.gameState === 'GAMEOVER' || this.gameState === 'VICTORY') {
                 this.restart();
             }
         };
@@ -176,6 +179,7 @@ export class Game {
         this.waveManager.reset();
         this.graze.reset();
         this.shop.reset();
+        this.dialogue.reset();
         this.waveManager.startWave();
         this.sound.startMusic();
         this.sound.playMenuConfirm();
@@ -205,6 +209,8 @@ export class Game {
 
         if (action === 'left') this.input.injectKey('ArrowLeft', active);
         if (action === 'right') this.input.injectKey('ArrowRight', active);
+        if (action === 'up') this.input.injectKey('ArrowUp', active);
+        if (action === 'down') this.input.injectKey('ArrowDown', active);
         if (action === 'fire') {
             if (active && this.player && (this.gameState === 'PLAYING' || this.gameState === 'BOSS_BATTLE')) {
                 this.player.shoot();
@@ -228,6 +234,10 @@ export class Game {
 
     addHomingBullet(x, y, damage = 2) {
         this.homingBullets.push(new HomingBullet(this, x, y, damage));
+    }
+
+    getEnemyBulletSpeedMultiplier() {
+        return 1 + (this.waveManager.wave - 1) * 0.04;
     }
 
     shakeScreen(intensity, duration) {
@@ -303,6 +313,7 @@ export class Game {
 
         // Always update visual stuff
         this.background.update(deltaTime);
+        this.dialogue.update(deltaTime);
         this.particles.forEach(p => p.update());
         this.particles = this.particles.filter(p => !p.markedForDeletion);
         this.scorePopups.forEach(p => { p.y += p.vy; p.life -= 0.02; });
@@ -353,6 +364,14 @@ export class Game {
         }
 
         if (this.gameState === 'GAMEOVER') {
+            if (input.wasJustPressed('r') || input.wasJustPressed('R')) {
+                this.restart();
+            }
+            input.clearFrame();
+            return;
+        }
+
+        if (this.gameState === 'VICTORY') {
             if (input.wasJustPressed('r') || input.wasJustPressed('R')) {
                 this.restart();
             }
@@ -515,6 +534,13 @@ export class Game {
             this.gameState = 'BOSS_INTRO';
             this.bossIntroTimer = 2000;
             this.boss = createBoss(this, this.waveManager.wave);
+
+            // Show boss intro dialogue from stage data
+            const stage = getStageForWave(this.waveManager.wave);
+            if (stage && stage.dialogue && stage.dialogue.bossIntro) {
+                this.dialogue.show(stage.dialogue.bossIntro.text, stage.dialogue.bossIntro.speaker, 2500);
+            }
+
             this.sound.playBossWarning();
             this.shakeScreen(10, 500);
             this.flashScreen('rgba(255, 0, 0, 0.3)', 300);
@@ -536,8 +562,22 @@ export class Game {
                     bullet.markedForDeletion = true;
                 }
 
-                this.boss.hp -= bullet.damage || 1;
-                this.createParticles(bullet.x, bullet.y, 'orange', 3);
+                const dmg = bullet.damage || 1;
+
+                // EmperorBoss barrier handling
+                if (this.boss.barrierActive && this.boss.barrierHp !== undefined) {
+                    this.boss.barrierHp -= dmg;
+                    this.createParticles(bullet.x, bullet.y, 'cyan', 3);
+                    if (this.boss.barrierHp <= 0) {
+                        this.boss.barrierActive = false;
+                        this.boss.barrierRechargeTimer = 0;
+                        this.flashScreen('rgba(0, 255, 255, 0.3)', 200);
+                        this.addScorePopup(this.boss.x + this.boss.width / 2, this.boss.y, 'BARRIER DOWN!', 'cyan');
+                    }
+                } else {
+                    this.boss.hp -= dmg;
+                    this.createParticles(bullet.x, bullet.y, 'orange', 3);
+                }
                 this.sound.playHit();
 
                 if (this.boss.hp <= 0) {
@@ -574,8 +614,14 @@ export class Game {
 
         this.boss = null;
         this.enemyBullets = [];
-        this.gameState = 'WAVE_CLEAR';
-        this.waveClearTimer = 2500;
+
+        // Check if final wave -> VICTORY
+        if (this.waveManager.wave >= getMaxWave()) {
+            this.handleGameVictory();
+        } else {
+            this.gameState = 'WAVE_CLEAR';
+            this.waveClearTimer = 2500;
+        }
     }
 
     _checkBulletsVsEnemy(enemy) {
@@ -629,9 +675,13 @@ export class Game {
             // Power-up drops
             const dropRoll = Math.random();
             if (dropRoll < enemy.dropChance) {
-                const types = ['POWER', 'POWER', 'SHIELD', 'BOMB', 'LIFE', 'CREDITS'];
-                const type = types[Math.floor(Math.random() * types.length)];
-                this.powerUps.push(new PowerUp(this, enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, type));
+                if (Math.random() < 0.08) {
+                    this.powerUps.push(new PowerUp(this, enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, 'LIFE'));
+                } else {
+                    const types = ['POWER', 'SHIELD', 'BOMB', 'CREDITS', 'CREDITS'];
+                    const type = types[Math.floor(Math.random() * types.length)];
+                    this.powerUps.push(new PowerUp(this, enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, type));
+                }
             }
         }
     }
@@ -708,6 +758,12 @@ export class Game {
         }
     }
 
+    handleGameVictory() {
+        this.gameState = 'VICTORY';
+        this.sound.stopMusic();
+        this.sound.playWaveClear();
+    }
+
     restart() {
         this.score = 0;
         this.gameOver = false;
@@ -732,6 +788,7 @@ export class Game {
         this.waveManager.reset();
         this.graze.reset();
         this.shop.reset();
+        this.dialogue.reset();
         this.sound.stopMusic();
         this.background.setTheme('space');
     }
@@ -811,6 +868,9 @@ export class Game {
         // HUD
         this.hud.draw(ctx);
 
+        // Dialogue overlay
+        this.dialogue.draw(ctx);
+
         // Flash overlay
         if (this.flashTimer > 0) {
             ctx.save();
@@ -868,6 +928,10 @@ export class Game {
 
         if (this.gameState === 'GAMEOVER') {
             this.drawGameOverScreen();
+        }
+
+        if (this.gameState === 'VICTORY') {
+            this.drawVictoryScreen();
         }
 
         ctx.restore();
@@ -938,58 +1002,193 @@ export class Game {
             ctx.fill();
             ctx.restore();
 
-            ctx.font = "12px 'Press Start 2P', monospace";
+            ctx.font = "11px 'Press Start 2P', monospace";
             ctx.fillStyle = isSelected ? config.color1 : '#888';
             ctx.textAlign = 'left';
             ctx.fillText((i + 1) + '. ' + config.name, this.width / 2 - 140, y);
-            ctx.font = "8px 'Press Start 2P', monospace";
+            ctx.font = "7px 'Press Start 2P', monospace";
             ctx.fillStyle = isSelected ? '#ccc' : '#666';
-            ctx.fillText(config.description, this.width / 2 - 140, y + 18);
+            ctx.fillText(config.description, this.width / 2 - 140, y + 15);
+            // Evolution line
+            if (isSelected && config.evolution) {
+                ctx.fillStyle = '#555';
+                ctx.font = "6px 'Press Start 2P', monospace";
+                ctx.fillText(config.evolution.join(' \u2192 '), this.width / 2 - 140, y + 27);
+            }
         });
 
         ctx.textAlign = 'center';
         ctx.fillStyle = '#666';
         ctx.font = "9px 'Press Start 2P', monospace";
-        ctx.fillText('\u2191\u2193 SELECT  ENTER/TAP CONFIRM', this.width / 2, this.height / 2 + 230);
+        ctx.fillText('\u2191\u2193 SELECT  ENTER/TAP CONFIRM', this.width / 2, this.height / 2 + 210);
+
+        ctx.fillStyle = '#555';
+        ctx.font = "8px 'Press Start 2P', monospace";
+        ctx.fillText('WASD/ARROWS:MOVE  SPACE:FIRE', this.width / 2, this.height / 2 + 235);
+        ctx.fillText('B:BOMB  X:SPECIAL  ESC:PAUSE', this.width / 2, this.height / 2 + 255);
         ctx.restore();
     }
 
     drawGameOverScreen() {
         const ctx = this.ctx;
+        const t = performance.now();
         ctx.save();
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+
+        // Dark overlay with subtle pulse
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.80)';
         ctx.fillRect(0, 0, this.width, this.height);
 
-        ctx.textAlign = 'center';
-        ctx.shadowBlur = 30;
-        ctx.shadowColor = 'red';
-        ctx.fillStyle = 'white';
-        ctx.font = "32px 'Press Start 2P', monospace";
-        ctx.fillText('GAME OVER', this.width / 2, this.height / 2 - 40);
+        // 西谷化 morphing effect - GAME OVER text morphs into 西谷化
+        const morphProgress = Math.min(1, (t % 8000) / 4000); // cycles every 8s
+        const isGameOver = morphProgress < 0.5;
+        const textStr = isGameOver ? 'GAME OVER' : '西 谷 化';
+        const morphFade = isGameOver ? 1 : Math.sin((morphProgress - 0.5) * Math.PI * 2) * 0.5 + 0.5;
 
+        ctx.textAlign = 'center';
+
+        // Glitch scanlines behind text
+        ctx.globalAlpha = 0.15;
+        ctx.fillStyle = '#ff0044';
+        for (let i = 0; i < 10; i++) {
+            const sy = this.height / 2 - 80 + Math.random() * 160;
+            ctx.fillRect(0, sy, this.width, 2);
+        }
+        ctx.globalAlpha = 1;
+
+        // Main text with glitch offset
+        const glitchX = (Math.random() - 0.5) * (isGameOver ? 2 : 8);
+        const glitchY = (Math.random() - 0.5) * (isGameOver ? 1 : 4);
+
+        if (!isGameOver) {
+            // Red shadow layer for 西谷化
+            ctx.shadowBlur = 40;
+            ctx.shadowColor = '#ff0000';
+            ctx.fillStyle = '#ff0000';
+            ctx.font = "36px 'Press Start 2P', monospace";
+            ctx.globalAlpha = 0.4;
+            ctx.fillText(textStr, this.width / 2 + glitchX + 3, this.height / 2 - 40 + glitchY + 3);
+            ctx.globalAlpha = 1;
+        }
+
+        ctx.shadowBlur = 30;
+        ctx.shadowColor = isGameOver ? 'red' : '#ff00ff';
+        ctx.fillStyle = isGameOver ? 'white' : '#ff4488';
+        ctx.font = `${isGameOver ? 32 : 36}px 'Press Start 2P', monospace`;
+        ctx.fillText(textStr, this.width / 2 + glitchX, this.height / 2 - 40 + glitchY);
+
+        // Subtitle for 西谷化
+        if (!isGameOver) {
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#ff0088';
+            ctx.fillStyle = '#ff88aa';
+            ctx.font = "10px 'Press Start 2P', monospace";
+            ctx.fillText('- BAD END -', this.width / 2, this.height / 2 - 5);
+            ctx.fillStyle = '#cc6688';
+            ctx.font = "8px 'Press Start 2P', monospace";
+            ctx.fillText('あなたも西谷になりました', this.width / 2, this.height / 2 + 15);
+        }
+
+        // Score info
         ctx.shadowBlur = 0;
         ctx.font = "16px 'Press Start 2P', monospace";
         ctx.fillStyle = 'lime';
-        ctx.fillText('SCORE: ' + this.score, this.width / 2, this.height / 2 + 10);
+        ctx.fillText('SCORE: ' + this.score, this.width / 2, this.height / 2 + 45);
         ctx.fillStyle = 'cyan';
-        ctx.fillText('HIGH: ' + this.highScore, this.width / 2, this.height / 2 + 40);
+        ctx.fillText('HIGH: ' + this.highScore, this.width / 2, this.height / 2 + 70);
         ctx.fillStyle = '#aaa';
         ctx.font = "12px 'Press Start 2P', monospace";
-        ctx.fillText('WAVE: ' + (this.waveManager ? this.waveManager.wave : this.wave), this.width / 2, this.height / 2 + 65);
+        ctx.fillText('WAVE: ' + (this.waveManager ? this.waveManager.wave : this.wave), this.width / 2, this.height / 2 + 95);
 
         if (this.score >= this.highScore && this.score > 0) {
             ctx.shadowBlur = 15;
             ctx.shadowColor = 'gold';
             ctx.fillStyle = 'gold';
             ctx.font = "14px 'Press Start 2P', monospace";
-            ctx.fillText('NEW HIGH SCORE!', this.width / 2, this.height / 2 + 95);
+            ctx.fillText('NEW HIGH SCORE!', this.width / 2, this.height / 2 + 120);
             ctx.shadowBlur = 0;
         }
 
         ctx.fillStyle = '#888';
         ctx.font = "10px 'Press Start 2P', monospace";
-        if (Math.floor(performance.now() / 600) % 2 === 0) {
-            ctx.fillText('R / TAP TO RESTART', this.width / 2, this.height / 2 + 130);
+        if (Math.floor(t / 600) % 2 === 0) {
+            ctx.fillText('R / TAP TO RESTART', this.width / 2, this.height / 2 + 155);
+        }
+        ctx.restore();
+    }
+
+    drawVictoryScreen() {
+        const ctx = this.ctx;
+        const t = performance.now();
+        ctx.save();
+
+        // Black overlay
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+        ctx.fillRect(0, 0, this.width, this.height);
+
+        // Golden particles
+        ctx.globalAlpha = 0.3;
+        for (let i = 0; i < 20; i++) {
+            const px = (t * 0.02 + i * 137) % this.width;
+            const py = (t * 0.01 + i * 97) % this.height;
+            ctx.fillStyle = i % 2 === 0 ? '#ffdd00' : '#ff8800';
+            ctx.beginPath();
+            ctx.arc(px, py, 2 + Math.sin(t / 500 + i) * 1.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+
+        ctx.textAlign = 'center';
+
+        // VICTORY text with gold glow
+        const pulse = Math.sin(t / 500) * 5 + 25;
+        ctx.shadowBlur = pulse;
+        ctx.shadowColor = '#ffdd00';
+        ctx.fillStyle = '#ffdd00';
+        ctx.font = "36px 'Press Start 2P', monospace";
+        ctx.fillText('VICTORY', this.width / 2, this.height / 2 - 100);
+
+        // Normal End subtitle
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#ffffff';
+        ctx.fillStyle = '#ffffff';
+        ctx.font = "14px 'Press Start 2P', monospace";
+        ctx.fillText('- NORMAL END -', this.width / 2, this.height / 2 - 60);
+
+        // Story text
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#cccccc';
+        ctx.font = "9px 'Press Start 2P', monospace";
+        const lines = [
+            '顔面戦艦YASUOMIは崩壊した。',
+            'しかし、西谷の笑顔はまだ',
+            '宇宙のどこかで微笑んでいる……',
+            '',
+            '「また会おう。次はもっと',
+            '  素敵な笑顔を見せてあげるよ」',
+        ];
+        lines.forEach((line, i) => {
+            ctx.fillText(line, this.width / 2, this.height / 2 - 20 + i * 22);
+        });
+
+        // Score
+        ctx.fillStyle = 'lime';
+        ctx.font = "16px 'Press Start 2P', monospace";
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = 'lime';
+        ctx.fillText('FINAL SCORE: ' + this.score, this.width / 2, this.height / 2 + 130);
+
+        if (this.score >= this.highScore && this.score > 0) {
+            ctx.shadowColor = 'gold';
+            ctx.fillStyle = 'gold';
+            ctx.font = "14px 'Press Start 2P', monospace";
+            ctx.fillText('NEW HIGH SCORE!', this.width / 2, this.height / 2 + 160);
+        }
+
+        ctx.fillStyle = '#888';
+        ctx.font = "10px 'Press Start 2P', monospace";
+        ctx.shadowBlur = 0;
+        if (Math.floor(t / 600) % 2 === 0) {
+            ctx.fillText('R / TAP TO RESTART', this.width / 2, this.height / 2 + 195);
         }
         ctx.restore();
     }

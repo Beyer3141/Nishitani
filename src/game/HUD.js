@@ -57,24 +57,35 @@ export class HUD {
             ctx.fillText(WEAPON_PATHS[p.weaponPath] ? WEAPON_PATHS[p.weaponPath].name : '', g.width - 20, 40);
             ctx.fillStyle = 'yellow';
             ctx.shadowColor = 'yellow';
-            ctx.fillText('Lv.' + p.weaponLevel, g.width - 20, 60);
+            ctx.fillText('Lv.' + p.weaponLevel + '/' + p.maxWeaponLevel, g.width - 20, 60);
+
+            // Evolution name
+            if (p.evolutionName) {
+                ctx.fillStyle = p.shipConfig ? (p.shipConfig.color1 || '#fff') : '#fff';
+                ctx.shadowColor = ctx.fillStyle;
+                ctx.font = "8px 'Press Start 2P', monospace";
+                ctx.fillText(p.evolutionName, g.width - 20, 76);
+            }
 
             // Shield status
             if (p.hasShield) {
                 ctx.fillStyle = 'cyan';
                 ctx.shadowColor = 'cyan';
-                ctx.fillText('SHIELD: ON', g.width - 20, 80);
+                ctx.font = "12px 'Press Start 2P', monospace";
+                ctx.fillText('SHIELD: ON', g.width - 20, 92);
             }
 
             // Special cooldown
             if (p.specialCooldown > 0) {
                 const cd = Math.ceil(p.specialCooldown / 1000);
                 ctx.fillStyle = '#888';
-                ctx.fillText('\u6280: ' + cd + 's', g.width - 20, 100);
+                ctx.font = "12px 'Press Start 2P', monospace";
+                ctx.fillText('\u6280: ' + cd + 's', g.width - 20, 112);
             } else {
                 ctx.fillStyle = '#0f0';
                 ctx.shadowColor = '#0f0';
-                ctx.fillText('\u6280: READY', g.width - 20, 100);
+                ctx.font = "12px 'Press Start 2P', monospace";
+                ctx.fillText('\u6280: READY', g.width - 20, 112);
             }
         }
 
@@ -98,7 +109,7 @@ export class HUD {
             ctx.shadowColor = '#ff88ff';
             ctx.shadowBlur = 5;
             ctx.font = "10px 'Press Start 2P', monospace";
-            ctx.fillText('GRAZE: ' + g.graze.totalGrazes, g.width - 20, 120);
+            ctx.fillText('GRAZE: ' + g.graze.totalGrazes, g.width - 20, 130);
         }
 
         // Boss warning
@@ -113,6 +124,25 @@ export class HUD {
             ctx.font = "16px 'Press Start 2P', monospace";
             ctx.fillText('!! BOSS BATTLE !!', g.width / 2, 40);
             ctx.restore();
+        }
+
+        // Key binding hints
+        if (g.gameState === 'PLAYING' || g.gameState === 'BOSS_BATTLE') {
+            ctx.textAlign = 'left';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+            ctx.shadowBlur = 0;
+            ctx.font = "8px 'Press Start 2P', monospace";
+            const hintY = g.playAreaBottom - 15;
+            ctx.fillText('WASD:Move Space:Fire B:Bomb X:Special ESC:Pause', 10, hintY);
+        }
+
+        // Stage name display
+        if (g.waveManager && g.waveManager.currentStage && (g.gameState === 'PLAYING' || g.gameState === 'BOSS_BATTLE')) {
+            ctx.textAlign = 'center';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.shadowBlur = 0;
+            ctx.font = "9px 'Press Start 2P', monospace";
+            ctx.fillText('Stage ' + g.waveManager.currentStage.id + ': ' + g.waveManager.currentStage.name, g.width / 2, 20);
         }
 
         // Pause indicator

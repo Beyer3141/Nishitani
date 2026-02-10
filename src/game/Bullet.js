@@ -165,6 +165,8 @@ export class EnemyBullet {
         this.markedForDeletion = false;
         this.trail = [];
         this.grazed = false;
+        this.isKanji = false;
+        this.rotation = 0;
     }
 
     update() {
@@ -172,12 +174,42 @@ export class EnemyBullet {
         if (this.trail.length > 5) this.trail.shift();
         this.x += this.vx;
         this.y += this.vy;
+        if (this.isKanji) this.rotation += 0.05;
         if (this.y > this.game.height + 20 || this.y < -20 || this.x < -20 || this.x > this.game.width + 20) {
             this.markedForDeletion = true;
         }
     }
 
     draw(ctx) {
+        if (this.isKanji) {
+            // 「西」kanji energy ball
+            ctx.save();
+            this.trail.forEach((pos, i) => {
+                ctx.globalAlpha = (i / this.trail.length) * 0.2;
+                ctx.fillStyle = '#ff00ff';
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, this.width / 3, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.restore();
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            ctx.rotate(this.rotation);
+            ctx.shadowBlur = 25;
+            ctx.shadowColor = '#ff00ff';
+            ctx.fillStyle = 'rgba(200, 0, 255, 0.4)';
+            ctx.beginPath();
+            ctx.arc(0, 0, this.width / 2 + 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.font = `bold ${this.width}px 'Press Start 2P', serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('西', 0, 0);
+            ctx.restore();
+            return;
+        }
+
         ctx.save();
         this.trail.forEach((pos, i) => {
             ctx.globalAlpha = (i / this.trail.length) * 0.3;

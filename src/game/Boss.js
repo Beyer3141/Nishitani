@@ -53,13 +53,14 @@ export class Boss {
         if (this.x < 0 || this.x > this.game.width - this.width) this.speedX *= -1;
         this.angle += 0.02;
 
-        // Phase-based speed/attack
+        // Phase-based speed/attack (scales with boss level)
+        const levelSpeedUp = this.level * 50;
         if (this.phase === 3) {
-            this.attackInterval = 600;
-            this.speedX = this.speedX > 0 ? 4 : -4;
+            this.attackInterval = Math.max(300, 600 - levelSpeedUp);
+            this.speedX = this.speedX > 0 ? 4 + this.level * 0.5 : -(4 + this.level * 0.5);
         } else if (this.phase === 2) {
-            this.attackInterval = 900;
-            this.speedX = this.speedX > 0 ? 3 : -3;
+            this.attackInterval = Math.max(500, 900 - levelSpeedUp);
+            this.speedX = this.speedX > 0 ? 3 + this.level * 0.3 : -(3 + this.level * 0.3);
         }
 
         if (this.attackTimer > this.attackInterval) {
@@ -97,6 +98,26 @@ export class Boss {
         }
     }
 
+    _drawHpBar(ctx, bob = 0) {
+        const barWidth = this.width + 40;
+        const barX = this.x - 20;
+        ctx.fillStyle = '#333';
+        ctx.fillRect(barX, this.y + bob - 25, barWidth, 14);
+        const hpColor = this.hpRatio > 0.5 ? '#0f0' : this.hpRatio > 0.25 ? '#ff0' : '#f00';
+        ctx.fillStyle = hpColor;
+        ctx.fillRect(barX + 2, this.y + bob - 23, (barWidth - 4) * this.hpRatio, 10);
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(barX, this.y + bob - 25, barWidth, 14);
+
+        ctx.save();
+        ctx.fillStyle = 'white';
+        ctx.font = "10px 'Press Start 2P', monospace";
+        ctx.textAlign = 'center';
+        ctx.fillText(this.bossType, this.x + this.width / 2, this.y + bob - 32);
+        ctx.restore();
+    }
+
     draw(ctx) {
         const bob = Math.sin(this.angle) * 5;
 
@@ -115,24 +136,6 @@ export class Boss {
             ctx.restore();
         }
 
-        // HP Bar
-        const barWidth = this.width + 40;
-        const barX = this.x - 20;
-        ctx.fillStyle = '#333';
-        ctx.fillRect(barX, this.y - 25, barWidth, 14);
-        const hpColor = this.hpRatio > 0.5 ? '#0f0' : this.hpRatio > 0.25 ? '#ff0' : '#f00';
-        ctx.fillStyle = hpColor;
-        ctx.fillRect(barX + 2, this.y - 23, (barWidth - 4) * this.hpRatio, 10);
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(barX, this.y - 25, barWidth, 14);
-
-        // Boss name
-        ctx.save();
-        ctx.fillStyle = 'white';
-        ctx.font = "10px 'Press Start 2P', monospace";
-        ctx.textAlign = 'center';
-        ctx.fillText(this.bossType.toUpperCase(), this.x + this.width / 2, this.y - 32);
-        ctx.restore();
+        this._drawHpBar(ctx, bob);
     }
 }

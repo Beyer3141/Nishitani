@@ -1,21 +1,7 @@
 import { FORMATIONS, FormationSpawner } from './Formation';
+import { getStageForWave, getMaxWave } from './StageData';
 
-const BACKGROUND_THEMES = ['space', 'nebula', 'asteroid', 'warp', 'crimson'];
-
-const ENEMY_POOL_BY_WAVE = [
-    // Wave 1: basics only
-    [{ type: 'basic', weight: 7 }, { type: 'zigzag', weight: 3 }],
-    // Wave 2: add kamikaze
-    [{ type: 'basic', weight: 5 }, { type: 'zigzag', weight: 3 }, { type: 'kamikaze', weight: 2 }],
-    // Wave 3: add shooter
-    [{ type: 'basic', weight: 4 }, { type: 'zigzag', weight: 3 }, { type: 'kamikaze', weight: 2 }, { type: 'shooter', weight: 1 }],
-    // Wave 4: add swarm + shield
-    [{ type: 'basic', weight: 3 }, { type: 'zigzag', weight: 2 }, { type: 'kamikaze', weight: 2 }, { type: 'shooter', weight: 1 }, { type: 'swarm', weight: 1 }, { type: 'shield', weight: 1 }],
-    // Wave 5+: add tank, all types
-    [{ type: 'basic', weight: 2 }, { type: 'zigzag', weight: 2 }, { type: 'kamikaze', weight: 2 }, { type: 'shooter', weight: 2 }, { type: 'swarm', weight: 1 }, { type: 'shield', weight: 1 }, { type: 'tank', weight: 1 }],
-];
-
-const FORMATION_POOL = ['line', 'vShape', 'circle', 'diamond', 'wave', 'random', 'sides'];
+const FORMATION_POOL = ['line', 'vShape', 'circle', 'diamond', 'wave', 'random', 'sides', 'surround'];
 
 function pickWeighted(pool) {
     const total = pool.reduce((s, e) => s + e.weight, 0);
@@ -39,22 +25,41 @@ export class WaveManager {
         this.waveComplete = false;
         this.betweenWaveTimer = 0;
         this.betweenWaveDelay = 2000;
+        this.currentStage = null;
+        this.previousStageId = 0;
     }
 
     get backgroundTheme() {
-        return BACKGROUND_THEMES[(this.wave - 1) % BACKGROUND_THEMES.length];
+        const stage = getStageForWave(this.wave);
+        return stage ? stage.background : 'space';
     }
 
     getEnemyPool() {
-        const idx = Math.min(this.wave - 1, ENEMY_POOL_BY_WAVE.length - 1);
-        return ENEMY_POOL_BY_WAVE[idx];
+        const stage = getStageForWave(this.wave);
+        if (stage && stage.enemyPool.length > 0) return stage.enemyPool;
+        return [{ type: 'basic', weight: 5 }, { type: 'zigzag', weight: 3 }];
     }
 
     getHpMultiplier() {
-        return 1 + (this.wave - 1) * 0.2;
+        return 1 + (this.wave - 1) * 0.5;
     }
 
     startWave() {
+        const stage = getStageForWave(this.wave);
+        this.currentStage = stage;
+
+        // Trigger stage start dialogue if entering a new stage
+        if (stage && stage.id !== this.previousStageId) {
+            this.previousStageId = stage.id;
+            if (stage.dialogue && stage.dialogue.stageStart && this.game.dialogue) {
+                this.game.dialogue.show(
+                    stage.dialogue.stageStart.text,
+                    stage.dialogue.stageStart.speaker,
+                    3000
+                );
+            }
+        }
+
         this.subWave = 0;
         this.waveComplete = false;
         this.waveStarted = true;
@@ -62,6 +67,13 @@ export class WaveManager {
         this.spawners = [];
         this.enemiesAlive = 0;
         this.game.background.setTheme(this.backgroundTheme);
+
+        // If stage has no enemy pool (e.g., Stage 5), go straight to boss
+        if (stage && stage.enemyPool.length === 0) {
+            this.waveComplete = true;
+            return;
+        }
+
         this.spawnSubWave();
     }
 
@@ -113,6 +125,11 @@ export class WaveManager {
     }
 
     nextWave() {
+        if (this.wave >= getMaxWave()) {
+            // Game completed - trigger victory
+            this.game.handleGameVictory();
+            return;
+        }
         this.wave++;
         this.subWavesPerWave = Math.min(3 + Math.floor(this.wave / 3), 6);
     }
@@ -126,5 +143,7 @@ export class WaveManager {
         this.waveStarted = false;
         this.waveComplete = false;
         this.betweenWaveTimer = 0;
+        this.currentStage = null;
+        this.previousStageId = 0;
     }
 }

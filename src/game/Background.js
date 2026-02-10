@@ -37,6 +37,36 @@ const THEMES = {
             { speed: 0.9, count: 15, sizeRange: [1.5, 3], alphaRange: [0.5, 0.8], color: '#ff6666' },
         ]
     },
+    nishitani_space: {
+        gradient: ['#0a0a2a', '#1a1a4a'],
+        layers: [
+            { speed: 0.15, count: 8, sizeRange: [20, 40], alphaRange: [0.08, 0.15], color: '#ffddaa', type: 'face_asteroid' },
+            { speed: 0.3, count: 50, sizeRange: [0.5, 2], alphaRange: [0.2, 0.5], color: 'white' },
+            { speed: 0.8, count: 20, sizeRange: [1.5, 3], alphaRange: [0.5, 0.8], color: '#ffddcc' },
+        ]
+    },
+    factory: {
+        gradient: ['#1a1a1a', '#2a2a30'],
+        layers: [
+            { speed: 0.3, count: 12, sizeRange: [3, 8], alphaRange: [0.1, 0.2], color: '#555566', type: 'pipe' },
+            { speed: 0.5, count: 6, sizeRange: [15, 30], alphaRange: [0.08, 0.12], color: '#334455', type: 'conveyor' },
+            { speed: 0.8, count: 30, sizeRange: [1, 2], alphaRange: [0.3, 0.5], color: '#aabb88' },
+        ]
+    },
+    fleet: {
+        gradient: ['#0a0a1a', '#1a0a2a'],
+        layers: [
+            { speed: 0.1, count: 4, sizeRange: [40, 80], alphaRange: [0.05, 0.1], color: '#223355', type: 'battleship' },
+            { speed: 0.3, count: 50, sizeRange: [0.5, 2], alphaRange: [0.2, 0.4], color: '#aaaacc' },
+            { speed: 0.7, count: 15, sizeRange: [1, 3], alphaRange: [0.4, 0.7], color: '#6666aa' },
+        ]
+    },
+    void: {
+        gradient: ['#ffffff', '#eeeeff'],
+        layers: [
+            { speed: 0.1, count: 20, sizeRange: [1, 3], alphaRange: [0.05, 0.15], color: '#ccccdd' },
+        ]
+    },
 };
 
 export class Background {
@@ -137,6 +167,59 @@ export class Background {
                     }
                     ctx.closePath();
                     ctx.fill();
+                } else if (layer.type === 'face_asteroid') {
+                    // Circular asteroid with smiley face
+                    ctx.translate(p.x, p.y);
+                    ctx.rotate(p.rotation);
+                    ctx.fillStyle = p.cloudColor;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Simple smiley
+                    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+                    ctx.fillRect(-p.size * 0.3, -p.size * 0.2, p.size * 0.15, p.size * 0.15);
+                    ctx.fillRect(p.size * 0.15, -p.size * 0.2, p.size * 0.15, p.size * 0.15);
+                    ctx.beginPath();
+                    ctx.arc(0, p.size * 0.15, p.size * 0.3, 0, Math.PI);
+                    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                } else if (layer.type === 'pipe') {
+                    ctx.fillStyle = p.cloudColor;
+                    ctx.fillRect(p.x, p.y, p.size, p.size * 8);
+                    ctx.strokeStyle = '#666677';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(p.x, p.y, p.size, p.size * 8);
+                } else if (layer.type === 'conveyor') {
+                    ctx.fillStyle = p.cloudColor;
+                    ctx.fillRect(p.x - p.size, p.y, p.size * 2, p.size * 0.5);
+                    ctx.strokeStyle = '#445566';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(p.x - p.size, p.y, p.size * 2, p.size * 0.5);
+                    // Conveyor belt lines
+                    ctx.strokeStyle = '#556677';
+                    for (let ci = 0; ci < 4; ci++) {
+                        const lx = p.x - p.size + ci * p.size * 0.5;
+                        ctx.beginPath();
+                        ctx.moveTo(lx, p.y);
+                        ctx.lineTo(lx, p.y + p.size * 0.5);
+                        ctx.stroke();
+                    }
+                } else if (layer.type === 'battleship') {
+                    ctx.translate(p.x, p.y);
+                    ctx.fillStyle = p.cloudColor;
+                    // Angular battleship silhouette
+                    ctx.beginPath();
+                    ctx.moveTo(0, -p.size * 0.6);
+                    ctx.lineTo(p.size * 0.3, -p.size * 0.2);
+                    ctx.lineTo(p.size * 0.4, p.size * 0.5);
+                    ctx.lineTo(-p.size * 0.4, p.size * 0.5);
+                    ctx.lineTo(-p.size * 0.3, -p.size * 0.2);
+                    ctx.closePath();
+                    ctx.fill();
+                    // Bridge
+                    ctx.fillStyle = '#334466';
+                    ctx.fillRect(-p.size * 0.1, -p.size * 0.4, p.size * 0.2, p.size * 0.2);
                 } else if (layer.type === 'warpline') {
                     ctx.strokeStyle = p.cloudColor;
                     ctx.lineWidth = p.size * 0.5;

@@ -82,6 +82,21 @@ export const FORMATIONS = {
         }
         return spawns;
     },
+
+    surround(count, gameWidth) {
+        const spawns = [];
+        const margin = 60;
+        for (let i = 0; i < count; i++) {
+            const side = i % 4;
+            let x;
+            if (side === 0) x = margin;
+            else if (side === 1) x = gameWidth - margin - 60;
+            else if (side === 2) x = gameWidth / 2 - 30;
+            else x = margin + Math.random() * (gameWidth - margin * 2 - 60);
+            spawns.push({ x: Math.max(10, Math.min(gameWidth - 70, x)), y: -60 - Math.floor(i / 4) * 80, delay: i * 200 });
+        }
+        return spawns;
+    },
 };
 
 export class FormationSpawner {
