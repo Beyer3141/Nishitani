@@ -178,8 +178,40 @@ export class Game {
 
         this.waveManager.reset();
         this.graze.reset();
-        this.shop.reset();
         this.dialogue.reset();
+
+        // New Game+ (強くてニューゲーム): load saved upgrade data
+        const saved = this.loadProgress();
+        if (saved) {
+            // Restore weapon level
+            if (saved.weaponLevel && saved.weaponLevel > 1) {
+                for (let i = 1; i < saved.weaponLevel; i++) {
+                    this.player.upgradeWeapon();
+                }
+            }
+            // Restore speed and damage bonuses
+            if (saved.speedBonus) this.player.speedBonus = saved.speedBonus;
+            if (saved.damageBonus) this.player.damageBonus = saved.damageBonus;
+            // Restore shop purchase history
+            if (saved.shopHistory) {
+                this.shop.purchaseHistory = { ...saved.shopHistory };
+                this.shop.selectedIndex = 0;
+            } else {
+                this.shop.reset();
+            }
+            // Restore Nishitani Breaker state
+            if (saved.nishitaniBreakerPurchased) {
+                this.shop.nishitaniBreakerPurchased = true;
+                this.shop.nishitaniBreakerUnlocked = true;
+            }
+            // Restore high score if higher
+            if (saved.highScore && saved.highScore > this.highScore) {
+                this.highScore = saved.highScore;
+            }
+        } else {
+            this.shop.reset();
+        }
+
         this.waveManager.startWave();
         this.sound.startMusic();
         this.sound.playMenuConfirm();
@@ -400,6 +432,7 @@ export class Game {
                 this.gameState = 'SHOP';
                 this.shop.selectedIndex = 0;
                 this.sound.stopMusic();
+                this.saveProgress();
             }
             input.clearFrame();
             return;
@@ -615,6 +648,9 @@ export class Game {
         this.boss = null;
         this.enemyBullets = [];
 
+        // Save progress after boss defeat
+        this.saveProgress();
+
         // Check if final wave -> VICTORY
         if (this.waveManager.wave >= getMaxWave()) {
             this.handleGameVictory();
@@ -747,6 +783,7 @@ export class Game {
                 this.gameState = 'GAMEOVER';
                 this.sound.stopMusic();
                 this.combo = 0;
+                this.saveProgress();
             } else {
                 this.invincibleTimer = 3000;
                 // Reset position (above control area)
@@ -762,9 +799,47 @@ export class Game {
         this.gameState = 'VICTORY';
         this.sound.stopMusic();
         this.sound.playWaveClear();
+        this.saveProgress();
     }
 
-    restart() {
+    // --- New Game+ (強くてニューゲーム) Save/Load ---
+
+    saveProgress() {
+        if (!this.player) return;
+        const data = {
+            weaponLevel: this.player.weaponLevel,
+            speedBonus: this.player.speedBonus,
+            damageBonus: this.player.damageBonus,
+            shopHistory: { ...this.shop.purchaseHistory },
+            nishitaniBreakerPurchased: this.shop.nishitaniBreakerPurchased,
+            highScore: this.highScore,
+        };
+        try {
+            localStorage.setItem('nishitaniSaveData', JSON.stringify(data));
+        } catch (e) {
+            // localStorage may be full or unavailable
+        }
+    }
+
+    loadProgress() {
+        try {
+            const raw = localStorage.getItem('nishitaniSaveData');
+            if (!raw) return null;
+            return JSON.parse(raw);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    clearProgress() {
+        try {
+            localStorage.removeItem('nishitaniSaveData');
+        } catch (e) {
+            // ignore
+        }
+    }
+
+    restart(fullReset = false) {
         this.score = 0;
         this.gameOver = false;
         this.gameState = 'SHIP_SELECT';
@@ -787,10 +862,17 @@ export class Game {
         this.player = null;
         this.waveManager.reset();
         this.graze.reset();
-        this.shop.reset();
         this.dialogue.reset();
         this.sound.stopMusic();
         this.background.setTheme('space');
+
+        if (fullReset) {
+            // Shift+R: full reset - clear all saved progress
+            this.shop.reset();
+            this.clearProgress();
+        }
+        // Normal restart: shop history is preserved in localStorage
+        // and will be loaded in startGame() via loadProgress()
     }
 
     checkCollision(rect1, rect2) {

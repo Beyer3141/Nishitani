@@ -1,168 +1,322 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 
-const BTN_BASE = 'touch-none select-none transition-all duration-75 flex items-center justify-center';
+// ---------- Constants ----------
+const JOYSTICK_RADIUS = 60;
+const KNOB_RADIUS = 20;
+const DEAD_ZONE = 12;
 
-function TouchBtn({ onDown, onUp, className, children, style }) {
+// ---------- Virtual Joystick ----------
+function VirtualJoystick({ onTouchStart, onTouchEnd }) {
+    const baseRef = useRef(null);
+    const [knobPos, setKnobPos] = useState({ x: 0, y: 0 });
+    const [active, setActive] = useState(false);
+    const activeDirections = useRef(new Set());
+
+    const emitDirections = useCallback((dx, dy) => {
+        const next = new Set();
+        if (dx < -DEAD_ZONE) next.add('left');
+        if (dx > DEAD_ZONE) next.add('right');
+        if (dy < -DEAD_ZONE) next.add('up');
+        if (dy > DEAD_ZONE) next.add('down');
+
+        const prev = activeDirections.current;
+        // Release directions no longer held
+        for (const dir of prev) {
+            if (!next.has(dir)) onTouchEnd(dir);
+        }
+        // Press new directions
+        for (const dir of next) {
+            if (!prev.has(dir)) onTouchStart(dir);
+        }
+        activeDirections.current = next;
+    }, [onTouchStart, onTouchEnd]);
+
+    const releaseAll = useCallback(() => {
+        for (const dir of activeDirections.current) {
+            onTouchEnd(dir);
+        }
+        activeDirections.current = new Set();
+        setKnobPos({ x: 0, y: 0 });
+        setActive(false);
+    }, [onTouchEnd]);
+
+    const getOffset = useCallback((clientX, clientY) => {
+        const rect = baseRef.current.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        let dx = clientX - cx;
+        let dy = clientY - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const maxDist = JOYSTICK_RADIUS - KNOB_RADIUS;
+        if (dist > maxDist) {
+            dx = (dx / dist) * maxDist;
+            dy = (dy / dist) * maxDist;
+        }
+        return { dx, dy };
+    }, []);
+
+    const handleStart = useCallback((e) => {
+        e.preventDefault();
+        setActive(true);
+        const t = e.touches ? e.touches[0] : e;
+        const { dx, dy } = getOffset(t.clientX, t.clientY);
+        setKnobPos({ x: dx, y: dy });
+        emitDirections(dx, dy);
+    }, [getOffset, emitDirections]);
+
+    const handleMove = useCallback((e) => {
+        e.preventDefault();
+        if (!active && !e.touches) return;
+        const t = e.touches ? e.touches[0] : e;
+        const { dx, dy } = getOffset(t.clientX, t.clientY);
+        setKnobPos({ x: dx, y: dy });
+        emitDirections(dx, dy);
+    }, [active, getOffset, emitDirections]);
+
+    const handleEnd = useCallback((e) => {
+        e.preventDefault();
+        releaseAll();
+    }, [releaseAll]);
+
+    // Mouse move/up on window so dragging outside still works
+    useEffect(() => {
+        if (!active) return;
+        const onMouseMove = (e) => {
+            const { dx, dy } = getOffset(e.clientX, e.clientY);
+            setKnobPos({ x: dx, y: dy });
+            emitDirections(dx, dy);
+        };
+        const onMouseUp = () => releaseAll();
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+        return () => {
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+        };
+    }, [active, getOffset, emitDirections, releaseAll]);
+
+    const diameter = JOYSTICK_RADIUS * 2;
+
+    return (
+        <div
+            ref={baseRef}
+            onTouchStart={handleStart}
+            onTouchMove={handleMove}
+            onTouchEnd={handleEnd}
+            onTouchCancel={handleEnd}
+            onMouseDown={handleStart}
+            style={{
+                width: diameter,
+                height: diameter,
+                borderRadius: '50%',
+                position: 'relative',
+                touchAction: 'none',
+                userSelect: 'none',
+                WebkitUserSelect: 'none',
+                // Base ring
+                background: 'radial-gradient(circle, rgba(255,255,255,0.02) 0%, rgba(0,0,0,0.25) 100%)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                boxShadow: active
+                    ? 'inset 0 0 30px rgba(140,180,255,0.06), 0 0 12px rgba(140,180,255,0.04)'
+                    : 'inset 0 0 20px rgba(0,0,0,0.3)',
+                backdropFilter: 'blur(4px)',
+                WebkitBackdropFilter: 'blur(4px)',
+                overflow: 'hidden',
+            }}
+        >
+            {/* Concentric guide rings */}
+            <svg
+                width={diameter}
+                height={diameter}
+                style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}
+            >
+                <circle cx={JOYSTICK_RADIUS} cy={JOYSTICK_RADIUS} r={JOYSTICK_RADIUS - 4}
+                    fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="0.5" />
+                <circle cx={JOYSTICK_RADIUS} cy={JOYSTICK_RADIUS} r={JOYSTICK_RADIUS * 0.6}
+                    fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="0.5" />
+                <circle cx={JOYSTICK_RADIUS} cy={JOYSTICK_RADIUS} r={JOYSTICK_RADIUS * 0.3}
+                    fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth="0.5" />
+                {/* Crosshair lines */}
+                <line x1={JOYSTICK_RADIUS} y1={4} x2={JOYSTICK_RADIUS} y2={diameter - 4}
+                    stroke="rgba(255,255,255,0.03)" strokeWidth="0.5" />
+                <line x1={4} y1={JOYSTICK_RADIUS} x2={diameter - 4} y2={JOYSTICK_RADIUS}
+                    stroke="rgba(255,255,255,0.03)" strokeWidth="0.5" />
+                {/* Diagonal guides */}
+                <line x1={14} y1={14} x2={diameter - 14} y2={diameter - 14}
+                    stroke="rgba(255,255,255,0.015)" strokeWidth="0.5" />
+                <line x1={diameter - 14} y1={14} x2={14} y2={diameter - 14}
+                    stroke="rgba(255,255,255,0.015)" strokeWidth="0.5" />
+            </svg>
+
+            {/* Knob */}
+            <div
+                style={{
+                    position: 'absolute',
+                    width: KNOB_RADIUS * 2,
+                    height: KNOB_RADIUS * 2,
+                    borderRadius: '50%',
+                    left: JOYSTICK_RADIUS - KNOB_RADIUS + knobPos.x,
+                    top: JOYSTICK_RADIUS - KNOB_RADIUS + knobPos.y,
+                    background: active
+                        ? 'radial-gradient(circle at 40% 38%, rgba(180,200,255,0.18) 0%, rgba(100,130,200,0.10) 60%, rgba(60,80,140,0.06) 100%)'
+                        : 'radial-gradient(circle at 40% 38%, rgba(255,255,255,0.10) 0%, rgba(150,150,180,0.06) 60%, rgba(80,80,100,0.04) 100%)',
+                    border: active
+                        ? '1px solid rgba(180,200,255,0.25)'
+                        : '1px solid rgba(255,255,255,0.10)',
+                    boxShadow: active
+                        ? '0 0 8px rgba(140,170,255,0.12), inset 0 1px 2px rgba(255,255,255,0.08)'
+                        : '0 0 4px rgba(0,0,0,0.2), inset 0 1px 2px rgba(255,255,255,0.05)',
+                    transition: active ? 'none' : 'all 0.15s ease-out',
+                    pointerEvents: 'none',
+                }}
+            />
+        </div>
+    );
+}
+
+// ---------- Action Button ----------
+function ActionButton({ onDown, onUp, size, label, accentColor, style: extraStyle }) {
     const [pressed, setPressed] = useState(false);
+
     const handleDown = useCallback((e) => {
         e.preventDefault();
         setPressed(true);
         onDown();
     }, [onDown]);
+
     const handleUp = useCallback((e) => {
         e.preventDefault();
         setPressed(false);
         onUp();
     }, [onUp]);
 
+    const handleLeave = useCallback(() => {
+        if (pressed) {
+            setPressed(false);
+            onUp();
+        }
+    }, [pressed, onUp]);
+
+    const accent = accentColor || 'rgba(255,255,255,0.15)';
+
     return (
         <button
-            className={`${BTN_BASE} ${className} ${pressed ? 'scale-90 brightness-150' : ''}`}
-            style={style}
             onTouchStart={handleDown}
             onTouchEnd={handleUp}
             onTouchCancel={handleUp}
             onMouseDown={handleDown}
             onMouseUp={handleUp}
-            onMouseLeave={() => { setPressed(false); onUp(); }}
+            onMouseLeave={handleLeave}
+            style={{
+                width: size,
+                height: size,
+                borderRadius: '50%',
+                border: `1px solid ${pressed ? accentColor || 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.08)'}`,
+                background: pressed
+                    ? `radial-gradient(circle at 45% 42%, ${accent}, rgba(0,0,0,0.3) 100%)`
+                    : 'radial-gradient(circle at 45% 42%, rgba(255,255,255,0.04) 0%, rgba(0,0,0,0.25) 100%)',
+                backdropFilter: 'blur(4px)',
+                WebkitBackdropFilter: 'blur(4px)',
+                boxShadow: pressed
+                    ? `inset 0 0 12px rgba(0,0,0,0.4), 0 0 8px ${accent}`
+                    : 'inset 0 0 8px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2)',
+                transform: pressed ? 'scale(0.93)' : 'scale(1)',
+                filter: pressed ? 'brightness(1.3)' : 'brightness(1)',
+                transition: 'transform 0.06s ease, filter 0.06s ease, border-color 0.1s ease, box-shadow 0.1s ease',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                touchAction: 'none',
+                userSelect: 'none',
+                WebkitUserSelect: 'none',
+                cursor: 'pointer',
+                outline: 'none',
+                padding: 0,
+                color: '#fff',
+                ...extraStyle,
+            }}
         >
-            {children}
+            <span style={{
+                fontSize: size > 60 ? 16 : 12,
+                fontWeight: 300,
+                letterSpacing: '0.05em',
+                color: pressed ? '#fff' : 'rgba(255,255,255,0.55)',
+                textShadow: pressed ? `0 0 6px ${accent}` : 'none',
+                transition: 'color 0.06s ease, text-shadow 0.06s ease',
+                fontFamily: '"Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", sans-serif',
+                lineHeight: 1,
+                pointerEvents: 'none',
+            }}>
+                {label}
+            </span>
         </button>
     );
 }
 
+// ---------- Main Controls ----------
 export default function Controls({ onTouchStart, onTouchEnd }) {
     return (
         <div
-            className="absolute left-0 w-full pointer-events-none"
-            style={{ bottom: 'calc(8px + env(safe-area-inset-bottom, 0px))' }}
+            style={{
+                position: 'absolute',
+                left: 0,
+                width: '100%',
+                bottom: 'calc(8px + env(safe-area-inset-bottom, 0px))',
+                pointerEvents: 'none',
+                zIndex: 50,
+            }}
         >
-            {/* Main control area */}
-            <div className="px-3 flex justify-between items-end">
-                {/* D-Pad (left side) */}
-                <div className="pointer-events-auto flex flex-col items-center gap-1" style={{ filter: 'drop-shadow(0 0 8px rgba(0,200,255,0.4))' }}>
-                    {/* Up button */}
-                    <TouchBtn
-                        onDown={() => onTouchStart('up')}
-                        onUp={() => onTouchEnd('up')}
-                        className="w-12 h-10 rounded-t-xl"
-                        style={{
-                            background: 'linear-gradient(180deg, rgba(0,200,255,0.45) 0%, rgba(0,100,200,0.35) 100%)',
-                            border: '1px solid rgba(0,200,255,0.5)',
-                            backdropFilter: 'blur(4px)',
-                        }}
-                    >
-                        <svg width="16" height="10" viewBox="0 0 16 10" fill="none">
-                            <path d="M8 1L15 9H1L8 1Z" fill="white" fillOpacity="0.9"/>
-                        </svg>
-                    </TouchBtn>
-                    {/* Left / Right row */}
-                    <div className="flex gap-1">
-                        <TouchBtn
-                            onDown={() => onTouchStart('left')}
-                            onUp={() => onTouchEnd('left')}
-                            className="w-14 h-14 rounded-l-xl"
-                            style={{
-                                background: 'linear-gradient(90deg, rgba(0,200,255,0.45) 0%, rgba(0,100,200,0.3) 100%)',
-                                border: '1px solid rgba(0,200,255,0.5)',
-                                backdropFilter: 'blur(4px)',
-                            }}
-                        >
-                            <svg width="10" height="16" viewBox="0 0 10 16" fill="none">
-                                <path d="M1 8L9 1V15L1 8Z" fill="white" fillOpacity="0.9"/>
-                            </svg>
-                        </TouchBtn>
-                        <TouchBtn
-                            onDown={() => onTouchStart('right')}
-                            onUp={() => onTouchEnd('right')}
-                            className="w-14 h-14 rounded-r-xl"
-                            style={{
-                                background: 'linear-gradient(270deg, rgba(0,200,255,0.45) 0%, rgba(0,100,200,0.3) 100%)',
-                                border: '1px solid rgba(0,200,255,0.5)',
-                                backdropFilter: 'blur(4px)',
-                            }}
-                        >
-                            <svg width="10" height="16" viewBox="0 0 10 16" fill="none">
-                                <path d="M9 8L1 15V1L9 8Z" fill="white" fillOpacity="0.9"/>
-                            </svg>
-                        </TouchBtn>
-                    </div>
-                    {/* Down button */}
-                    <TouchBtn
-                        onDown={() => onTouchStart('down')}
-                        onUp={() => onTouchEnd('down')}
-                        className="w-12 h-10 rounded-b-xl"
-                        style={{
-                            background: 'linear-gradient(0deg, rgba(0,200,255,0.45) 0%, rgba(0,100,200,0.35) 100%)',
-                            border: '1px solid rgba(0,200,255,0.5)',
-                            backdropFilter: 'blur(4px)',
-                        }}
-                    >
-                        <svg width="16" height="10" viewBox="0 0 16 10" fill="none">
-                            <path d="M8 9L1 1H15L8 9Z" fill="white" fillOpacity="0.9"/>
-                        </svg>
-                    </TouchBtn>
+            <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-end',
+                padding: '0 12px',
+            }}>
+                {/* Left: Virtual Joystick */}
+                <div style={{ pointerEvents: 'auto' }}>
+                    <VirtualJoystick onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} />
                 </div>
 
-                {/* Action buttons (right side) - arcade style */}
-                <div className="pointer-events-auto flex items-end gap-2" style={{ filter: 'drop-shadow(0 0 10px rgba(255,50,50,0.3))' }}>
-                    {/* Bomb button */}
-                    <TouchBtn
-                        onDown={() => onTouchStart('bomb')}
-                        onUp={() => onTouchEnd('bomb')}
-                        className="w-13 h-13 rounded-full"
-                        style={{
-                            width: '52px',
-                            height: '52px',
-                            background: 'radial-gradient(circle at 35% 35%, rgba(255,200,0,0.6) 0%, rgba(255,120,0,0.45) 60%, rgba(200,80,0,0.3) 100%)',
-                            border: '2px solid rgba(255,200,0,0.6)',
-                            boxShadow: 'inset 0 -3px 6px rgba(0,0,0,0.3), 0 0 15px rgba(255,150,0,0.3)',
-                            marginBottom: '18px',
-                        }}
-                    >
-                        <span style={{ fontSize: '18px', textShadow: '0 0 8px rgba(255,200,0,0.8)', color: '#fff', fontWeight: 'bold' }}>
-                            💣
-                        </span>
-                    </TouchBtn>
+                {/* Right: Action Buttons - triangular layout */}
+                <div style={{
+                    pointerEvents: 'auto',
+                    position: 'relative',
+                    width: 140,
+                    height: 140,
+                }}>
+                    {/* FIRE - center, largest */}
+                    <div style={{ position: 'absolute', top: 4, left: '50%', transform: 'translateX(-50%)' }}>
+                        <ActionButton
+                            onDown={() => onTouchStart('fire')}
+                            onUp={() => onTouchEnd('fire')}
+                            size={68}
+                            label={'\u767A\u5C04'}
+                            accentColor="rgba(200,160,140,0.18)"
+                        />
+                    </div>
 
-                    {/* FIRE button (main, biggest) */}
-                    <TouchBtn
-                        onDown={() => onTouchStart('fire')}
-                        onUp={() => onTouchEnd('fire')}
-                        className="rounded-full"
-                        style={{
-                            width: '76px',
-                            height: '76px',
-                            background: 'radial-gradient(circle at 35% 35%, rgba(255,80,80,0.7) 0%, rgba(220,30,30,0.55) 50%, rgba(150,0,0,0.4) 100%)',
-                            border: '2.5px solid rgba(255,100,100,0.7)',
-                            boxShadow: 'inset 0 -4px 8px rgba(0,0,0,0.3), 0 0 20px rgba(255,50,50,0.4)',
-                        }}
-                    >
-                        <div className="flex flex-col items-center">
-                            <span style={{ fontSize: '10px', letterSpacing: '2px', color: '#fff', fontWeight: 'bold', textShadow: '0 0 10px rgba(255,100,100,0.9)' }}>
-                                FIRE
-                            </span>
-                        </div>
-                    </TouchBtn>
+                    {/* BOMB - bottom left */}
+                    <div style={{ position: 'absolute', bottom: 0, left: 0 }}>
+                        <ActionButton
+                            onDown={() => onTouchStart('bomb')}
+                            onUp={() => onTouchEnd('bomb')}
+                            size={52}
+                            label={'\u7206'}
+                            accentColor="rgba(255,180,100,0.15)"
+                        />
+                    </div>
 
-                    {/* Special button */}
-                    <TouchBtn
-                        onDown={() => onTouchStart('special')}
-                        onUp={() => onTouchEnd('special')}
-                        className="rounded-full"
-                        style={{
-                            width: '52px',
-                            height: '52px',
-                            background: 'radial-gradient(circle at 35% 35%, rgba(100,100,255,0.6) 0%, rgba(50,50,220,0.45) 60%, rgba(30,0,180,0.3) 100%)',
-                            border: '2px solid rgba(120,120,255,0.6)',
-                            boxShadow: 'inset 0 -3px 6px rgba(0,0,0,0.3), 0 0 15px rgba(100,100,255,0.3)',
-                            marginBottom: '18px',
-                        }}
-                    >
-                        <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#ddf', textShadow: '0 0 8px rgba(100,100,255,0.9)', letterSpacing: '1px' }}>
-                            SP
-                        </span>
-                    </TouchBtn>
+                    {/* SPECIAL - bottom right */}
+                    <div style={{ position: 'absolute', bottom: 0, right: 0 }}>
+                        <ActionButton
+                            onDown={() => onTouchStart('special')}
+                            onUp={() => onTouchEnd('special')}
+                            size={52}
+                            label={'\u6280'}
+                            accentColor="rgba(140,160,255,0.15)"
+                        />
+                    </div>
                 </div>
             </div>
         </div>
