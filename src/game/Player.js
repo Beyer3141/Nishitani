@@ -89,7 +89,7 @@ export class Player {
         this.width = 50;
         this.height = 50;
         this.x = game.width / 2 - this.width / 2;
-        this.y = game.height - this.height - 20;
+        this.y = game.playAreaBottom - this.height - 10;
         this.speed = this.shipConfig.speed;
         this.baseSpeed = this.shipConfig.speed;
         this.damage = this.shipConfig.damage;
@@ -151,7 +151,7 @@ export class Player {
         if (this.x < 0) this.x = 0;
         if (this.x > this.game.width - this.width) this.x = this.game.width - this.width;
         if (this.y < 0) this.y = 0;
-        if (this.y > this.game.height - this.height) this.y = this.game.height - this.height;
+        if (this.y > this.game.playAreaBottom - this.height) this.y = this.game.playAreaBottom - this.height;
 
         this.engineFlicker = Math.random();
         if (this.fireTimer > 0) this.fireTimer -= deltaTime;
@@ -312,7 +312,7 @@ export class Player {
                 return true;
             case 'teleport':
                 this.x = Math.random() * (this.game.width - this.width);
-                this.y = this.game.height - this.height - 20 - Math.random() * 100;
+                this.y = this.game.playAreaBottom - this.height - 10 - Math.random() * 100;
                 this.game.createParticles(this.x + this.width / 2, this.y + this.height / 2, '#8844ff', 20);
                 this.game.invincibleTimer = 1000;
                 return true;

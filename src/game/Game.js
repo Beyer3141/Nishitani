@@ -60,6 +60,9 @@ export class Game {
         this.flashTimer = 0;
         this.flashColor = 'white';
 
+        // Control overlay height (touch controls area at bottom)
+        this.controlAreaHeight = 120;
+
         // Boss intro timer
         this.bossIntroTimer = 0;
 
@@ -122,13 +125,17 @@ export class Game {
         this.canvas.addEventListener('click', this._onCanvasClick);
     }
 
+    get playAreaBottom() {
+        return this.height - this.controlAreaHeight;
+    }
+
     resize() {
         this.canvas.width = window.innerWidth;
         this.canvas.height = window.innerHeight;
         this.width = this.canvas.width;
         this.height = this.canvas.height;
         if (this.player) {
-            this.player.y = Math.min(this.player.y, this.height - this.player.height - 20);
+            this.player.y = Math.min(this.player.y, this.playAreaBottom - this.player.height);
         }
     }
 
@@ -692,9 +699,9 @@ export class Game {
                 this.combo = 0;
             } else {
                 this.invincibleTimer = 3000;
-                // Reset position
+                // Reset position (above control area)
                 this.player.x = this.width / 2 - this.player.width / 2;
-                this.player.y = this.height - this.player.height - 20;
+                this.player.y = this.playAreaBottom - this.player.height - 10;
                 this.addScorePopup(this.player.x + this.player.width / 2, this.player.y - 30,
                     'LIVES: ' + this.player.lives, '#ff66aa');
             }

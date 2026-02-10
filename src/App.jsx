@@ -2,7 +2,7 @@ import GameCanvas from './components/GameCanvas';
 
 function App() {
   return (
-    <div className="w-screen h-screen overflow-hidden bg-black">
+    <div className="fixed inset-0 overflow-hidden bg-black">
       <GameCanvas />
     </div>
   );

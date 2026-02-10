@@ -1,6 +1,6 @@
 export default function Controls({ onTouchStart, onTouchEnd }) {
     return (
-        <div className="absolute bottom-4 left-0 w-full px-4 flex justify-between items-center pointer-events-none">
+        <div className="absolute left-0 w-full px-4 flex justify-between items-center pointer-events-none" style={{ bottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}>
             <div className="flex gap-4 pointer-events-auto">
                 <button
                     className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center active:bg-white/40 touch-none select-none"
