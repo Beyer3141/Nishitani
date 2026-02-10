@@ -416,144 +416,1146 @@ export class Player {
         const cx = this.x + this.width / 2;
         const cy = this.y + this.height / 2;
         const tier = this.evolutionTier;
+        const t = performance.now();
+        const trait = this.shipConfig.trait;
+        const c1 = this.shipConfig.color1;
+        const c2 = this.shipConfig.color2;
+        const w = this.width;
+        const h = this.height;
+        const lx = this.x;       // left x
+        const ty = this.y;       // top y
+        const rx = lx + w;       // right x
+        const by = ty + h;       // bottom y
+        const flicker = this.engineFlicker;
 
-        // Engine flame (bigger at higher tiers)
-        ctx.save();
-        const flameH = 15 + this.engineFlicker * 10 + tier * 5;
-        const flameW = 10 + tier * 4;
-        const gradient = ctx.createLinearGradient(cx, this.y + this.height, cx, this.y + this.height + flameH);
-        gradient.addColorStop(0, tier >= 2 ? '#00ffff' : 'yellow');
-        gradient.addColorStop(0.5, tier >= 2 ? '#0088ff' : 'orange');
-        gradient.addColorStop(1, 'transparent');
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.moveTo(cx - flameW, this.y + this.height);
-        ctx.lineTo(cx + flameW, this.y + this.height);
-        ctx.lineTo(cx, this.y + this.height + flameH);
-        ctx.closePath();
-        ctx.fill();
-        // Side thrusters at tier 2
-        if (tier >= 2) {
-            ctx.fillStyle = gradient;
+        // ── Helper: radial engine glow ──
+        const drawEngineGlow = (ex, ey, radius, innerColor, outerColor) => {
+            const g = ctx.createRadialGradient(ex, ey, 0, ex, ey, radius);
+            g.addColorStop(0, innerColor);
+            g.addColorStop(0.4, outerColor);
+            g.addColorStop(1, 'transparent');
+            ctx.fillStyle = g;
             ctx.beginPath();
-            ctx.moveTo(this.x + 5, this.y + this.height - 5);
-            ctx.lineTo(this.x + 12, this.y + this.height - 5);
-            ctx.lineTo(this.x + 8, this.y + this.height + flameH * 0.5);
-            ctx.closePath();
+            ctx.arc(ex, ey, radius, 0, Math.PI * 2);
             ctx.fill();
-            ctx.beginPath();
-            ctx.moveTo(this.x + this.width - 12, this.y + this.height - 5);
-            ctx.lineTo(this.x + this.width - 5, this.y + this.height - 5);
-            ctx.lineTo(this.x + this.width - 8, this.y + this.height + flameH * 0.5);
-            ctx.closePath();
-            ctx.fill();
-        }
-        ctx.restore();
+        };
 
+        // ── Helper: panel line ──
+        const panelLine = (x1, y1, x2, y2, alpha) => {
+            ctx.strokeStyle = `rgba(255,255,255,${alpha || 0.12})`;
+            ctx.lineWidth = 0.5;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+        };
+
+        // ── Helper: weapon pod ──
+        const drawWeaponPod = (px, py, size) => {
+            ctx.fillStyle = '#555';
+            ctx.fillRect(px - size / 2, py - size, size, size * 2);
+            ctx.fillStyle = '#fff';
+            ctx.shadowBlur = 4;
+            ctx.shadowColor = c1;
+            ctx.beginPath();
+            ctx.arc(px, py - size, size * 0.4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        };
+
+        // ── Dash after-image ──
         if (this.dashing) {
             ctx.save();
-            ctx.globalAlpha = 0.3;
-            ctx.fillStyle = this.shipConfig.color1;
-            ctx.fillRect(this.x - 5, this.y, this.width + 10, this.height + 20);
+            ctx.globalAlpha = 0.25;
+            ctx.fillStyle = c1;
+            ctx.fillRect(lx - 5, ty, w + 10, h + 20);
             ctx.restore();
         }
 
-        // Ship body - evolves with tier
+        // ================================================================
+        //  SHIP DRAWING — per trait, per tier
+        // ================================================================
         ctx.save();
-        ctx.shadowBlur = 15 + tier * 5;
-        ctx.shadowColor = this.shipConfig.color1;
 
-        const bodyGradient = ctx.createLinearGradient(this.x, this.y, this.x + this.width, this.y + this.height);
-        bodyGradient.addColorStop(0, this.shipConfig.color1);
-        bodyGradient.addColorStop(0.5, this.shipConfig.color2);
-        bodyGradient.addColorStop(1, '#222');
-        ctx.fillStyle = bodyGradient;
+        if (trait === 'speed') {
+            // ── SPEEDER — needle body, swept-back tiny wings ──
+            const engineR = 6 + tier * 3 + flicker * 4;
+            // Engine nacelles — dual thin engines
+            const eOffX = 6 + tier * 2;
+            drawEngineGlow(cx - eOffX, by + 2, engineR, '#aaffcc', '#00ff88');
+            drawEngineGlow(cx + eOffX, by + 2, engineR, '#aaffcc', '#00ff88');
+            if (tier >= 2) {
+                drawEngineGlow(cx, by + 4, engineR * 1.2, '#ffffff', '#00ffaa');
+            }
 
-        if (tier === 0) {
-            // Basic triangle
+            // Hull gradient
+            const bg = ctx.createLinearGradient(lx, ty, rx, by);
+            bg.addColorStop(0, c1);
+            bg.addColorStop(0.6, c2);
+            bg.addColorStop(1, '#1a3322');
+            ctx.fillStyle = bg;
+            ctx.shadowBlur = 12 + tier * 6;
+            ctx.shadowColor = c1;
+
+            if (tier === 0) {
+                // Sleek needle — long thin fuselage, tiny swept wings
+                ctx.beginPath();
+                ctx.moveTo(cx, ty);                    // nose tip
+                ctx.lineTo(cx + 4, ty + h * 0.25);     // right fuselage widen
+                ctx.lineTo(cx + 5, ty + h * 0.55);     // right body
+                ctx.lineTo(rx - 2, ty + h * 0.85);     // right wing tip
+                ctx.lineTo(cx + 7, ty + h * 0.78);     // wing root right
+                ctx.lineTo(cx + 5, by);                 // right engine
+                ctx.lineTo(cx - 5, by);                 // left engine
+                ctx.lineTo(cx - 7, ty + h * 0.78);     // wing root left
+                ctx.lineTo(lx + 2, ty + h * 0.85);     // left wing tip
+                ctx.lineTo(cx - 5, ty + h * 0.55);     // left body
+                ctx.lineTo(cx - 4, ty + h * 0.25);     // left fuselage
+                ctx.closePath();
+                ctx.fill();
+            } else if (tier === 1) {
+                // Mk-II: F-22 raptor silhouette — wider angular intakes, canted tails
+                ctx.beginPath();
+                ctx.moveTo(cx, ty - 4);                // nose
+                ctx.lineTo(cx + 6, ty + h * 0.15);     // right cheek
+                ctx.lineTo(cx + 10, ty + h * 0.3);     // right intake
+                ctx.lineTo(rx + 4, ty + h * 0.72);     // right wing leading edge
+                ctx.lineTo(rx + 6, ty + h * 0.78);     // right wing tip
+                ctx.lineTo(rx - 4, ty + h * 0.82);     // right wing trailing
+                ctx.lineTo(cx + 8, ty + h * 0.7);      // right body
+                ctx.lineTo(cx + 8, by);                 // right tail
+                ctx.lineTo(cx + 12, by + 4);            // right canted tail tip
+                ctx.lineTo(cx + 6, by - 2);             // inner tail right
+                ctx.lineTo(cx - 6, by - 2);             // inner tail left
+                ctx.lineTo(cx - 12, by + 4);            // left canted tail tip
+                ctx.lineTo(cx - 8, by);                 // left tail
+                ctx.lineTo(cx - 8, ty + h * 0.7);      // left body
+                ctx.lineTo(lx + 4, ty + h * 0.82);     // left wing trailing
+                ctx.lineTo(lx - 6, ty + h * 0.78);     // left wing tip
+                ctx.lineTo(lx - 4, ty + h * 0.72);     // left wing leading
+                ctx.lineTo(cx - 10, ty + h * 0.3);     // left intake
+                ctx.lineTo(cx - 6, ty + h * 0.15);     // left cheek
+                ctx.closePath();
+                ctx.fill();
+                // Intake shadow panels
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.beginPath();
+                ctx.moveTo(cx + 6, ty + h * 0.15);
+                ctx.lineTo(cx + 10, ty + h * 0.3);
+                ctx.lineTo(cx + 8, ty + h * 0.45);
+                ctx.lineTo(cx + 5, ty + h * 0.35);
+                ctx.closePath();
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(cx - 6, ty + h * 0.15);
+                ctx.lineTo(cx - 10, ty + h * 0.3);
+                ctx.lineTo(cx - 8, ty + h * 0.45);
+                ctx.lineTo(cx - 5, ty + h * 0.35);
+                ctx.closePath();
+                ctx.fill();
+            } else {
+                // Tier 2 Lightning — extreme swept, razor-thin with afterburners
+                ctx.beginPath();
+                ctx.moveTo(cx, ty - 8);                // long needle nose
+                ctx.lineTo(cx + 3, ty + h * 0.1);
+                ctx.lineTo(cx + 8, ty + h * 0.2);      // right intake bulge
+                ctx.lineTo(rx + 8, ty + h * 0.65);     // right wing far out
+                ctx.lineTo(rx + 12, ty + h * 0.7);     // right wingtip
+                ctx.lineTo(rx, ty + h * 0.75);         // trailing edge
+                ctx.lineTo(cx + 10, ty + h * 0.6);
+                ctx.lineTo(cx + 10, by);                // right nozzle
+                ctx.lineTo(cx + 14, by + 6);            // right tail fin
+                ctx.lineTo(cx + 7, by - 2);
+                ctx.lineTo(cx - 7, by - 2);
+                ctx.lineTo(cx - 14, by + 6);            // left tail fin
+                ctx.lineTo(cx - 10, by);
+                ctx.lineTo(cx - 10, ty + h * 0.6);
+                ctx.lineTo(lx, ty + h * 0.75);
+                ctx.lineTo(lx - 12, ty + h * 0.7);
+                ctx.lineTo(lx - 8, ty + h * 0.65);
+                ctx.lineTo(cx - 8, ty + h * 0.2);
+                ctx.lineTo(cx - 3, ty + h * 0.1);
+                ctx.closePath();
+                ctx.fill();
+                // Canard fins
+                ctx.fillStyle = c1;
+                ctx.beginPath();
+                ctx.moveTo(cx + 5, ty + h * 0.18);
+                ctx.lineTo(cx + 16, ty + h * 0.25);
+                ctx.lineTo(cx + 6, ty + h * 0.28);
+                ctx.closePath();
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(cx - 5, ty + h * 0.18);
+                ctx.lineTo(cx - 16, ty + h * 0.25);
+                ctx.lineTo(cx - 6, ty + h * 0.28);
+                ctx.closePath();
+                ctx.fill();
+                // Wing hardpoints
+                drawWeaponPod(lx - 8, ty + h * 0.68, 3);
+                drawWeaponPod(rx + 8, ty + h * 0.68, 3);
+            }
+            // Panel lines
+            panelLine(cx, ty + 4, cx, ty + h * 0.5, 0.15);
+            panelLine(cx - 3, ty + h * 0.3, cx + 3, ty + h * 0.3, 0.1);
+
+            // Cockpit
+            ctx.fillStyle = '#ccffee';
+            ctx.shadowBlur = 8 + tier * 4;
+            ctx.shadowColor = '#00ff88';
             ctx.beginPath();
-            ctx.moveTo(cx, this.y);
-            ctx.lineTo(this.x + this.width, this.y + this.height);
-            ctx.lineTo(cx, this.y + this.height * 0.7);
-            ctx.lineTo(this.x, this.y + this.height);
-            ctx.closePath();
+            ctx.ellipse(cx, ty + 12 + tier * 2, 3 + tier, 8 + tier * 2, 0, 0, Math.PI * 2);
             ctx.fill();
-        } else if (tier === 1) {
-            // Mk-II: swept wings + fin
+
+        } else if (trait === 'balanced') {
+            // ── BALANCED — X-Wing style ──
+            const engineR = 7 + tier * 3 + flicker * 4;
+            // Four engine nacelles on wing tips
+            const wingTipXOff = 14 + tier * 6;
+            const wingTipY = ty + h * 0.75;
+            drawEngineGlow(cx - wingTipXOff, wingTipY + 4, engineR, '#aaddff', '#0088ff');
+            drawEngineGlow(cx + wingTipXOff, wingTipY + 4, engineR, '#aaddff', '#0088ff');
+            if (tier >= 1) {
+                drawEngineGlow(cx - wingTipXOff + 3, wingTipY - 8, engineR * 0.7, '#ffffff', '#00aaff');
+                drawEngineGlow(cx + wingTipXOff - 3, wingTipY - 8, engineR * 0.7, '#ffffff', '#00aaff');
+            }
+
+            const bg = ctx.createLinearGradient(lx, ty, rx, by);
+            bg.addColorStop(0, c1);
+            bg.addColorStop(0.5, c2);
+            bg.addColorStop(1, '#112233');
+            ctx.fillStyle = bg;
+            ctx.shadowBlur = 12 + tier * 5;
+            ctx.shadowColor = c1;
+
+            if (tier === 0) {
+                // Classic X-Wing — four wings in X pattern, cylindrical body
+                // Fuselage
+                ctx.beginPath();
+                ctx.moveTo(cx, ty + 2);
+                ctx.lineTo(cx + 6, ty + h * 0.15);
+                ctx.lineTo(cx + 7, ty + h * 0.7);
+                ctx.lineTo(cx + 5, by);
+                ctx.lineTo(cx - 5, by);
+                ctx.lineTo(cx - 7, ty + h * 0.7);
+                ctx.lineTo(cx - 6, ty + h * 0.15);
+                ctx.closePath();
+                ctx.fill();
+                // Upper-right wing
+                ctx.beginPath();
+                ctx.moveTo(cx + 6, ty + h * 0.3);
+                ctx.lineTo(rx + 2, ty + h * 0.15);
+                ctx.lineTo(rx + 4, ty + h * 0.2);
+                ctx.lineTo(cx + 7, ty + h * 0.5);
+                ctx.closePath();
+                ctx.fill();
+                // Lower-right wing
+                ctx.beginPath();
+                ctx.moveTo(cx + 7, ty + h * 0.55);
+                ctx.lineTo(rx + 4, ty + h * 0.8);
+                ctx.lineTo(rx + 2, ty + h * 0.85);
+                ctx.lineTo(cx + 7, ty + h * 0.7);
+                ctx.closePath();
+                ctx.fill();
+                // Upper-left wing
+                ctx.beginPath();
+                ctx.moveTo(cx - 6, ty + h * 0.3);
+                ctx.lineTo(lx - 2, ty + h * 0.15);
+                ctx.lineTo(lx - 4, ty + h * 0.2);
+                ctx.lineTo(cx - 7, ty + h * 0.5);
+                ctx.closePath();
+                ctx.fill();
+                // Lower-left wing
+                ctx.beginPath();
+                ctx.moveTo(cx - 7, ty + h * 0.55);
+                ctx.lineTo(lx - 4, ty + h * 0.8);
+                ctx.lineTo(lx - 2, ty + h * 0.85);
+                ctx.lineTo(cx - 7, ty + h * 0.7);
+                ctx.closePath();
+                ctx.fill();
+            } else if (tier === 1) {
+                // Mk-II with forward canards, wider X-wings
+                // Fuselage
+                ctx.beginPath();
+                ctx.moveTo(cx, ty - 2);
+                ctx.lineTo(cx + 7, ty + h * 0.12);
+                ctx.lineTo(cx + 8, ty + h * 0.7);
+                ctx.lineTo(cx + 6, by + 2);
+                ctx.lineTo(cx - 6, by + 2);
+                ctx.lineTo(cx - 8, ty + h * 0.7);
+                ctx.lineTo(cx - 7, ty + h * 0.12);
+                ctx.closePath();
+                ctx.fill();
+                // Right wings — wider spread
+                ctx.beginPath();
+                ctx.moveTo(cx + 7, ty + h * 0.25);
+                ctx.lineTo(rx + 8, ty + h * 0.08);
+                ctx.lineTo(rx + 10, ty + h * 0.15);
+                ctx.lineTo(cx + 8, ty + h * 0.45);
+                ctx.closePath();
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(cx + 8, ty + h * 0.55);
+                ctx.lineTo(rx + 10, ty + h * 0.82);
+                ctx.lineTo(rx + 8, ty + h * 0.9);
+                ctx.lineTo(cx + 8, ty + h * 0.72);
+                ctx.closePath();
+                ctx.fill();
+                // Left wings
+                ctx.beginPath();
+                ctx.moveTo(cx - 7, ty + h * 0.25);
+                ctx.lineTo(lx - 8, ty + h * 0.08);
+                ctx.lineTo(lx - 10, ty + h * 0.15);
+                ctx.lineTo(cx - 8, ty + h * 0.45);
+                ctx.closePath();
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(cx - 8, ty + h * 0.55);
+                ctx.lineTo(lx - 10, ty + h * 0.82);
+                ctx.lineTo(lx - 8, ty + h * 0.9);
+                ctx.lineTo(cx - 8, ty + h * 0.72);
+                ctx.closePath();
+                ctx.fill();
+                // Forward canards
+                ctx.fillStyle = c1;
+                ctx.beginPath();
+                ctx.moveTo(cx + 5, ty + h * 0.1);
+                ctx.lineTo(cx + 18, ty + h * 0.05);
+                ctx.lineTo(cx + 16, ty + h * 0.12);
+                ctx.lineTo(cx + 6, ty + h * 0.15);
+                ctx.closePath();
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(cx - 5, ty + h * 0.1);
+                ctx.lineTo(cx - 18, ty + h * 0.05);
+                ctx.lineTo(cx - 16, ty + h * 0.12);
+                ctx.lineTo(cx - 6, ty + h * 0.15);
+                ctx.closePath();
+                ctx.fill();
+            } else {
+                // Tier 2 Vanguard — full X-wing with armored body + canards + pods
+                // Wide fuselage
+                ctx.beginPath();
+                ctx.moveTo(cx, ty - 4);
+                ctx.lineTo(cx + 9, ty + h * 0.1);
+                ctx.lineTo(cx + 10, ty + h * 0.65);
+                ctx.lineTo(cx + 8, by + 2);
+                ctx.lineTo(cx - 8, by + 2);
+                ctx.lineTo(cx - 10, ty + h * 0.65);
+                ctx.lineTo(cx - 9, ty + h * 0.1);
+                ctx.closePath();
+                ctx.fill();
+                // Upper wings
+                ctx.beginPath();
+                ctx.moveTo(cx + 9, ty + h * 0.2);
+                ctx.lineTo(rx + 14, ty);
+                ctx.lineTo(rx + 16, ty + h * 0.1);
+                ctx.lineTo(cx + 10, ty + h * 0.42);
+                ctx.closePath();
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(cx - 9, ty + h * 0.2);
+                ctx.lineTo(lx - 14, ty);
+                ctx.lineTo(lx - 16, ty + h * 0.1);
+                ctx.lineTo(cx - 10, ty + h * 0.42);
+                ctx.closePath();
+                ctx.fill();
+                // Lower wings
+                ctx.beginPath();
+                ctx.moveTo(cx + 10, ty + h * 0.55);
+                ctx.lineTo(rx + 16, ty + h * 0.85);
+                ctx.lineTo(rx + 14, ty + h * 0.95);
+                ctx.lineTo(cx + 10, ty + h * 0.72);
+                ctx.closePath();
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(cx - 10, ty + h * 0.55);
+                ctx.lineTo(lx - 16, ty + h * 0.85);
+                ctx.lineTo(lx - 14, ty + h * 0.95);
+                ctx.lineTo(cx - 10, ty + h * 0.72);
+                ctx.closePath();
+                ctx.fill();
+                // Canards
+                ctx.fillStyle = c1;
+                ctx.beginPath();
+                ctx.moveTo(cx + 6, ty + h * 0.06);
+                ctx.lineTo(cx + 22, ty - 2);
+                ctx.lineTo(cx + 20, ty + h * 0.08);
+                ctx.lineTo(cx + 7, ty + h * 0.12);
+                ctx.closePath();
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(cx - 6, ty + h * 0.06);
+                ctx.lineTo(cx - 22, ty - 2);
+                ctx.lineTo(cx - 20, ty + h * 0.08);
+                ctx.lineTo(cx - 7, ty + h * 0.12);
+                ctx.closePath();
+                ctx.fill();
+                // Wing tip weapon pods
+                drawWeaponPod(rx + 15, ty + h * 0.05, 3);
+                drawWeaponPod(lx - 15, ty + h * 0.05, 3);
+                drawWeaponPod(rx + 15, ty + h * 0.9, 3);
+                drawWeaponPod(lx - 15, ty + h * 0.9, 3);
+            }
+            // Panel lines
+            panelLine(cx, ty + 6, cx, by - 6, 0.1);
+            panelLine(cx - 5, ty + h * 0.4, cx + 5, ty + h * 0.4, 0.12);
+
+            // Cockpit
+            ctx.fillStyle = '#ccddff';
+            ctx.shadowBlur = 6 + tier * 4;
+            ctx.shadowColor = '#00aaff';
             ctx.beginPath();
-            ctx.moveTo(cx, this.y - 4);
-            ctx.lineTo(this.x + this.width + 5, this.y + this.height * 0.9);
-            ctx.lineTo(this.x + this.width - 5, this.y + this.height);
-            ctx.lineTo(cx, this.y + this.height * 0.6);
-            ctx.lineTo(this.x + 5, this.y + this.height);
-            ctx.lineTo(this.x - 5, this.y + this.height * 0.9);
-            ctx.closePath();
+            ctx.ellipse(cx, ty + 14 + tier, 4 + tier, 9 + tier * 2, 0, 0, Math.PI * 2);
             ctx.fill();
-            // Dorsal fin
-            ctx.fillStyle = this.shipConfig.color1;
+
+        } else if (trait === 'power') {
+            // ── TANK — heavy bomber, wide flat body ──
+            const engineR = 10 + tier * 4 + flicker * 5;
+            // Massive single engine block
+            drawEngineGlow(cx, by + 4, engineR * 1.4, '#ffcc88', '#ff6600');
+            if (tier >= 1) {
+                drawEngineGlow(cx - 12, by + 2, engineR * 0.8, '#ffaa44', '#aa4400');
+                drawEngineGlow(cx + 12, by + 2, engineR * 0.8, '#ffaa44', '#aa4400');
+            }
+            if (tier >= 2) {
+                drawEngineGlow(cx - 20, by, engineR * 0.6, '#ffcc88', '#ff4400');
+                drawEngineGlow(cx + 20, by, engineR * 0.6, '#ffcc88', '#ff4400');
+            }
+
+            const bg = ctx.createLinearGradient(lx, ty, rx, by);
+            bg.addColorStop(0, c1);
+            bg.addColorStop(0.4, c2);
+            bg.addColorStop(1, '#331100');
+            ctx.fillStyle = bg;
+            ctx.shadowBlur = 10 + tier * 6;
+            ctx.shadowColor = c1;
+
+            if (tier === 0) {
+                // Wide flat bomber body
+                ctx.beginPath();
+                ctx.moveTo(cx, ty + 4);                // nose (blunt)
+                ctx.lineTo(cx + 8, ty + 2);
+                ctx.lineTo(cx + 12, ty + h * 0.2);
+                ctx.lineTo(rx + 2, ty + h * 0.5);      // right wing
+                ctx.lineTo(rx + 4, ty + h * 0.55);
+                ctx.lineTo(rx - 2, ty + h * 0.65);
+                ctx.lineTo(cx + 14, ty + h * 0.7);
+                ctx.lineTo(cx + 12, by);
+                ctx.lineTo(cx - 12, by);
+                ctx.lineTo(cx - 14, ty + h * 0.7);
+                ctx.lineTo(lx + 2, ty + h * 0.65);
+                ctx.lineTo(lx - 4, ty + h * 0.55);
+                ctx.lineTo(lx - 2, ty + h * 0.5);
+                ctx.lineTo(cx - 12, ty + h * 0.2);
+                ctx.lineTo(cx - 8, ty + 2);
+                ctx.closePath();
+                ctx.fill();
+                // Armor plate lines
+                panelLine(cx - 10, ty + h * 0.25, cx + 10, ty + h * 0.25, 0.15);
+                panelLine(cx - 12, ty + h * 0.5, cx + 12, ty + h * 0.5, 0.15);
+                panelLine(cx - 10, ty + h * 0.7, cx + 10, ty + h * 0.7, 0.12);
+            } else if (tier === 1) {
+                // Mk-II: heavier, wider wings, visible bombs/hardpoints
+                ctx.beginPath();
+                ctx.moveTo(cx, ty);
+                ctx.lineTo(cx + 10, ty + 2);
+                ctx.lineTo(cx + 14, ty + h * 0.18);
+                ctx.lineTo(rx + 8, ty + h * 0.45);
+                ctx.lineTo(rx + 10, ty + h * 0.52);
+                ctx.lineTo(rx + 6, ty + h * 0.6);
+                ctx.lineTo(cx + 16, ty + h * 0.65);
+                ctx.lineTo(cx + 14, by + 2);
+                ctx.lineTo(cx - 14, by + 2);
+                ctx.lineTo(cx - 16, ty + h * 0.65);
+                ctx.lineTo(lx - 6, ty + h * 0.6);
+                ctx.lineTo(lx - 10, ty + h * 0.52);
+                ctx.lineTo(lx - 8, ty + h * 0.45);
+                ctx.lineTo(cx - 14, ty + h * 0.18);
+                ctx.lineTo(cx - 10, ty + 2);
+                ctx.closePath();
+                ctx.fill();
+                // Hardpoints under wings
+                drawWeaponPod(rx + 4, ty + h * 0.55, 3);
+                drawWeaponPod(lx - 4, ty + h * 0.55, 3);
+                panelLine(cx - 12, ty + h * 0.22, cx + 12, ty + h * 0.22, 0.15);
+                panelLine(cx - 14, ty + h * 0.5, cx + 14, ty + h * 0.5, 0.15);
+            } else {
+                // Tier 2 Destroyer — flying fortress with turret mounts
+                ctx.beginPath();
+                ctx.moveTo(cx, ty - 4);
+                ctx.lineTo(cx + 12, ty);
+                ctx.lineTo(cx + 16, ty + h * 0.15);
+                ctx.lineTo(rx + 14, ty + h * 0.4);
+                ctx.lineTo(rx + 18, ty + h * 0.48);
+                ctx.lineTo(rx + 14, ty + h * 0.58);
+                ctx.lineTo(cx + 18, ty + h * 0.62);
+                ctx.lineTo(cx + 16, by + 2);
+                ctx.lineTo(cx - 16, by + 2);
+                ctx.lineTo(cx - 18, ty + h * 0.62);
+                ctx.lineTo(lx - 14, ty + h * 0.58);
+                ctx.lineTo(lx - 18, ty + h * 0.48);
+                ctx.lineTo(lx - 14, ty + h * 0.4);
+                ctx.lineTo(cx - 16, ty + h * 0.15);
+                ctx.lineTo(cx - 12, ty);
+                ctx.closePath();
+                ctx.fill();
+                // Armor plating overlay
+                ctx.fillStyle = 'rgba(255,150,0,0.15)';
+                ctx.fillRect(cx - 14, ty + h * 0.18, 28, h * 0.25);
+                ctx.fillRect(cx - 16, ty + h * 0.5, 32, h * 0.15);
+                // Turret mounts
+                drawWeaponPod(rx + 10, ty + h * 0.45, 4);
+                drawWeaponPod(lx - 10, ty + h * 0.45, 4);
+                drawWeaponPod(cx, ty + h * 0.18, 4);
+                panelLine(cx - 14, ty + h * 0.2, cx + 14, ty + h * 0.2, 0.18);
+                panelLine(cx - 16, ty + h * 0.48, cx + 16, ty + h * 0.48, 0.18);
+                panelLine(cx - 14, ty + h * 0.65, cx + 14, ty + h * 0.65, 0.15);
+            }
+            // Cockpit — small armored slit
+            ctx.fillStyle = '#ffeedd';
+            ctx.shadowBlur = 5 + tier * 3;
+            ctx.shadowColor = '#ff8800';
             ctx.beginPath();
-            ctx.moveTo(cx, this.y - 4);
-            ctx.lineTo(cx + 3, this.y + 20);
-            ctx.lineTo(cx - 3, this.y + 20);
-            ctx.closePath();
+            ctx.ellipse(cx, ty + 10 + tier * 2, 5 + tier * 2, 5 + tier, 0, 0, Math.PI * 2);
             ctx.fill();
-        } else {
-            // Tier 2: aggressive angular body with wing hardpoints
+
+        } else if (trait === 'homing') {
+            // ── INTERCEPTOR — aggressive delta wing ──
+            const engineR = 7 + tier * 3 + flicker * 5;
+            drawEngineGlow(cx - 5, by + 3, engineR, '#ffaaff', '#ff00ff');
+            drawEngineGlow(cx + 5, by + 3, engineR, '#ffaaff', '#ff00ff');
+            if (tier >= 2) {
+                drawEngineGlow(cx, by + 5, engineR * 1.3, '#ffffff', '#ff44ff');
+            }
+
+            const bg = ctx.createLinearGradient(lx, ty, rx, by);
+            bg.addColorStop(0, c1);
+            bg.addColorStop(0.5, c2);
+            bg.addColorStop(1, '#220022');
+            ctx.fillStyle = bg;
+            ctx.shadowBlur = 14 + tier * 6;
+            ctx.shadowColor = c1;
+
+            if (tier === 0) {
+                // Aggressive delta — sharp pointed nose, wide triangular wings
+                ctx.beginPath();
+                ctx.moveTo(cx, ty - 2);                 // sharp nose
+                ctx.lineTo(cx + 4, ty + h * 0.2);
+                ctx.lineTo(rx + 6, ty + h * 0.7);       // right wing tip
+                ctx.lineTo(rx + 2, ty + h * 0.78);
+                ctx.lineTo(cx + 6, ty + h * 0.65);
+                ctx.lineTo(cx + 6, by);
+                ctx.lineTo(cx - 6, by);
+                ctx.lineTo(cx - 6, ty + h * 0.65);
+                ctx.lineTo(lx - 2, ty + h * 0.78);
+                ctx.lineTo(lx - 6, ty + h * 0.7);       // left wing tip
+                ctx.lineTo(cx - 4, ty + h * 0.2);
+                ctx.closePath();
+                ctx.fill();
+                // Wing edge highlights
+                ctx.strokeStyle = 'rgba(255,0,255,0.3)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(cx, ty - 2);
+                ctx.lineTo(rx + 6, ty + h * 0.7);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(cx, ty - 2);
+                ctx.lineTo(lx - 6, ty + h * 0.7);
+                ctx.stroke();
+            } else if (tier === 1) {
+                // Mk-II: sharper edges, ventral fins
+                ctx.beginPath();
+                ctx.moveTo(cx, ty - 6);
+                ctx.lineTo(cx + 5, ty + h * 0.15);
+                ctx.lineTo(rx + 10, ty + h * 0.65);
+                ctx.lineTo(rx + 8, ty + h * 0.75);
+                ctx.lineTo(cx + 8, ty + h * 0.6);
+                ctx.lineTo(cx + 8, by);
+                ctx.lineTo(cx + 10, by + 6);            // right ventral fin
+                ctx.lineTo(cx + 6, by - 2);
+                ctx.lineTo(cx - 6, by - 2);
+                ctx.lineTo(cx - 10, by + 6);            // left ventral fin
+                ctx.lineTo(cx - 8, by);
+                ctx.lineTo(cx - 8, ty + h * 0.6);
+                ctx.lineTo(lx - 8, ty + h * 0.75);
+                ctx.lineTo(lx - 10, ty + h * 0.65);
+                ctx.lineTo(cx - 5, ty + h * 0.15);
+                ctx.closePath();
+                ctx.fill();
+                // Dorsal spine
+                ctx.fillStyle = c1;
+                ctx.beginPath();
+                ctx.moveTo(cx, ty - 6);
+                ctx.lineTo(cx + 2, ty + h * 0.35);
+                ctx.lineTo(cx - 2, ty + h * 0.35);
+                ctx.closePath();
+                ctx.fill();
+            } else {
+                // Tier 2 Falcon — forward-swept wings, ultra aggressive
+                ctx.beginPath();
+                ctx.moveTo(cx, ty - 10);                // extreme needle nose
+                ctx.lineTo(cx + 4, ty + h * 0.1);
+                ctx.lineTo(cx + 10, ty + h * 0.25);
+                // Forward-swept right wing
+                ctx.lineTo(rx + 12, ty + h * 0.2);      // wing sweeps FORWARD
+                ctx.lineTo(rx + 14, ty + h * 0.28);
+                ctx.lineTo(cx + 12, ty + h * 0.45);
+                ctx.lineTo(cx + 10, ty + h * 0.55);
+                // Rear right stabilizer
+                ctx.lineTo(rx + 6, ty + h * 0.82);
+                ctx.lineTo(rx + 4, ty + h * 0.9);
+                ctx.lineTo(cx + 8, ty + h * 0.75);
+                ctx.lineTo(cx + 8, by);
+                ctx.lineTo(cx + 12, by + 8);            // tail fin
+                ctx.lineTo(cx + 6, by - 2);
+                ctx.lineTo(cx - 6, by - 2);
+                ctx.lineTo(cx - 12, by + 8);
+                ctx.lineTo(cx - 8, by);
+                ctx.lineTo(cx - 8, ty + h * 0.75);
+                ctx.lineTo(lx - 4, ty + h * 0.9);
+                ctx.lineTo(lx - 6, ty + h * 0.82);
+                ctx.lineTo(cx - 10, ty + h * 0.55);
+                ctx.lineTo(cx - 12, ty + h * 0.45);
+                ctx.lineTo(lx - 14, ty + h * 0.28);
+                ctx.lineTo(lx - 12, ty + h * 0.2);
+                ctx.lineTo(cx - 10, ty + h * 0.25);
+                ctx.lineTo(cx - 4, ty + h * 0.1);
+                ctx.closePath();
+                ctx.fill();
+                // Weapon pods on forward-swept wing tips
+                drawWeaponPod(rx + 13, ty + h * 0.24, 3);
+                drawWeaponPod(lx - 13, ty + h * 0.24, 3);
+                // Edge glow lines
+                ctx.strokeStyle = 'rgba(255,0,255,0.25)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(cx, ty - 10);
+                ctx.lineTo(rx + 12, ty + h * 0.2);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(cx, ty - 10);
+                ctx.lineTo(lx - 12, ty + h * 0.2);
+                ctx.stroke();
+            }
+            panelLine(cx, ty + 4, cx, by - 8, 0.1);
+
+            // Cockpit — angular
+            ctx.fillStyle = '#ffccff';
+            ctx.shadowBlur = 8 + tier * 4;
+            ctx.shadowColor = '#ff00ff';
             ctx.beginPath();
-            ctx.moveTo(cx, this.y - 8);
-            ctx.lineTo(this.x + this.width + 10, this.y + this.height * 0.85);
-            ctx.lineTo(this.x + this.width, this.y + this.height);
-            ctx.lineTo(cx + 8, this.y + this.height * 0.55);
-            ctx.lineTo(cx, this.y + this.height * 0.6);
-            ctx.lineTo(cx - 8, this.y + this.height * 0.55);
-            ctx.lineTo(this.x, this.y + this.height);
-            ctx.lineTo(this.x - 10, this.y + this.height * 0.85);
+            ctx.moveTo(cx, ty + 8 + tier);
+            ctx.lineTo(cx + 4 + tier, ty + 18 + tier * 2);
+            ctx.lineTo(cx - 4 - tier, ty + 18 + tier * 2);
             ctx.closePath();
             ctx.fill();
 
-            // Wing hardpoints (glowing dots)
+        } else if (trait === 'defense') {
+            // ── FORTRESS — boxy armored gunship ──
+            const engineR = 9 + tier * 4 + flicker * 4;
+            drawEngineGlow(cx - 10, by + 3, engineR, '#ffffaa', '#ffdd00');
+            drawEngineGlow(cx + 10, by + 3, engineR, '#ffffaa', '#ffdd00');
+            drawEngineGlow(cx, by + 5, engineR * 0.8, '#ffffff', '#ffaa00');
+            if (tier >= 2) {
+                drawEngineGlow(cx - 20, by + 2, engineR * 0.7, '#ffee88', '#aa8800');
+                drawEngineGlow(cx + 20, by + 2, engineR * 0.7, '#ffee88', '#aa8800');
+            }
+
+            const bg = ctx.createLinearGradient(lx, ty, rx, by);
+            bg.addColorStop(0, c1);
+            bg.addColorStop(0.4, c2);
+            bg.addColorStop(1, '#332200');
+            ctx.fillStyle = bg;
+            ctx.shadowBlur = 10 + tier * 5;
+            ctx.shadowColor = c1;
+
+            if (tier === 0) {
+                // Boxy gunship — flat armored hull
+                ctx.beginPath();
+                ctx.moveTo(cx - 4, ty + 4);             // blunt nose left
+                ctx.lineTo(cx + 4, ty + 4);             // blunt nose right
+                ctx.lineTo(cx + 10, ty + h * 0.15);
+                ctx.lineTo(rx + 2, ty + h * 0.35);      // right sponson
+                ctx.lineTo(rx + 4, ty + h * 0.45);
+                ctx.lineTo(rx + 2, ty + h * 0.55);
+                ctx.lineTo(cx + 12, ty + h * 0.6);
+                ctx.lineTo(cx + 12, by);
+                ctx.lineTo(cx - 12, by);
+                ctx.lineTo(cx - 12, ty + h * 0.6);
+                ctx.lineTo(lx - 2, ty + h * 0.55);
+                ctx.lineTo(lx - 4, ty + h * 0.45);
+                ctx.lineTo(lx - 2, ty + h * 0.35);
+                ctx.lineTo(cx - 10, ty + h * 0.15);
+                ctx.closePath();
+                ctx.fill();
+                // Shield generator domes
+                ctx.fillStyle = '#ffee88';
+                ctx.shadowBlur = 6;
+                ctx.shadowColor = '#ffdd00';
+                ctx.beginPath();
+                ctx.arc(cx - 8, ty + h * 0.35, 3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(cx + 8, ty + h * 0.35, 3, 0, Math.PI * 2);
+                ctx.fill();
+                panelLine(cx - 10, ty + h * 0.2, cx + 10, ty + h * 0.2, 0.15);
+                panelLine(cx - 12, ty + h * 0.5, cx + 12, ty + h * 0.5, 0.15);
+            } else if (tier === 1) {
+                // Mk-II: wider, turret mounts, heavier armor
+                ctx.beginPath();
+                ctx.moveTo(cx - 6, ty + 2);
+                ctx.lineTo(cx + 6, ty + 2);
+                ctx.lineTo(cx + 12, ty + h * 0.12);
+                ctx.lineTo(rx + 8, ty + h * 0.3);
+                ctx.lineTo(rx + 10, ty + h * 0.42);
+                ctx.lineTo(rx + 8, ty + h * 0.55);
+                ctx.lineTo(cx + 14, ty + h * 0.58);
+                ctx.lineTo(cx + 14, by + 2);
+                ctx.lineTo(cx - 14, by + 2);
+                ctx.lineTo(cx - 14, ty + h * 0.58);
+                ctx.lineTo(lx - 8, ty + h * 0.55);
+                ctx.lineTo(lx - 10, ty + h * 0.42);
+                ctx.lineTo(lx - 8, ty + h * 0.3);
+                ctx.lineTo(cx - 12, ty + h * 0.12);
+                ctx.closePath();
+                ctx.fill();
+                // Turret hardpoints
+                drawWeaponPod(rx + 6, ty + h * 0.38, 3);
+                drawWeaponPod(lx - 6, ty + h * 0.38, 3);
+                // Shield generator domes (bigger)
+                ctx.fillStyle = '#ffee88';
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = '#ffdd00';
+                ctx.beginPath();
+                ctx.arc(cx - 10, ty + h * 0.28, 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(cx + 10, ty + h * 0.28, 4, 0, Math.PI * 2);
+                ctx.fill();
+                panelLine(cx - 12, ty + h * 0.15, cx + 12, ty + h * 0.15, 0.18);
+                panelLine(cx - 14, ty + h * 0.45, cx + 14, ty + h * 0.45, 0.18);
+            } else {
+                // Tier 2 Iron Wall — literal flying battleship
+                ctx.beginPath();
+                ctx.moveTo(cx - 8, ty);
+                ctx.lineTo(cx + 8, ty);
+                ctx.lineTo(cx + 14, ty + h * 0.1);
+                ctx.lineTo(rx + 14, ty + h * 0.25);
+                ctx.lineTo(rx + 18, ty + h * 0.38);
+                ctx.lineTo(rx + 16, ty + h * 0.52);
+                ctx.lineTo(cx + 18, ty + h * 0.56);
+                ctx.lineTo(cx + 18, by + 2);
+                ctx.lineTo(cx - 18, by + 2);
+                ctx.lineTo(cx - 18, ty + h * 0.56);
+                ctx.lineTo(lx - 16, ty + h * 0.52);
+                ctx.lineTo(lx - 18, ty + h * 0.38);
+                ctx.lineTo(lx - 14, ty + h * 0.25);
+                ctx.lineTo(cx - 14, ty + h * 0.1);
+                ctx.closePath();
+                ctx.fill();
+                // Layered armor plates
+                ctx.fillStyle = 'rgba(255,220,0,0.1)';
+                ctx.fillRect(cx - 16, ty + h * 0.12, 32, h * 0.15);
+                ctx.fillRect(cx - 18, ty + h * 0.38, 36, h * 0.12);
+                ctx.fillRect(cx - 16, ty + h * 0.6, 32, h * 0.15);
+                // Multiple turret mounts
+                drawWeaponPod(rx + 14, ty + h * 0.32, 4);
+                drawWeaponPod(lx - 14, ty + h * 0.32, 4);
+                drawWeaponPod(cx - 8, ty + h * 0.12, 3);
+                drawWeaponPod(cx + 8, ty + h * 0.12, 3);
+                drawWeaponPod(cx, ty + h * 0.56, 3);
+                // Shield generator array — three domes
+                ctx.fillStyle = '#ffee88';
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = '#ffdd00';
+                for (const sx of [-12, 0, 12]) {
+                    ctx.beginPath();
+                    ctx.arc(cx + sx, ty + h * 0.22, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                panelLine(cx - 16, ty + h * 0.14, cx + 16, ty + h * 0.14, 0.2);
+                panelLine(cx - 18, ty + h * 0.4, cx + 18, ty + h * 0.4, 0.2);
+                panelLine(cx - 16, ty + h * 0.62, cx + 16, ty + h * 0.62, 0.18);
+            }
+            // Cockpit — armored viewport
+            ctx.fillStyle = '#ffeedd';
+            ctx.shadowBlur = 5 + tier * 2;
+            ctx.shadowColor = '#ffdd00';
+            ctx.beginPath();
+            ctx.ellipse(cx, ty + 12 + tier * 2, 4 + tier, 5 + tier, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+        } else if (trait === 'evasion') {
+            // ── PHANTOM — stealth fighter, angular facets ──
+            const engineR = 6 + tier * 2 + flicker * 3;
+            // Dim blue-purple engines
+            drawEngineGlow(cx - 6, by + 2, engineR, '#aa88ff', '#442288');
+            drawEngineGlow(cx + 6, by + 2, engineR, '#aa88ff', '#442288');
+
+            if (tier >= 2) {
+                // Holographic shimmer — nearly transparent
+                ctx.save();
+                const shimmer = Math.sin(t / 150) * 0.15 + 0.35;
+                ctx.globalAlpha = shimmer;
+            }
+
+            const bg = ctx.createLinearGradient(lx, ty, rx, by);
+            bg.addColorStop(0, tier >= 2 ? '#6633cc' : c1);
+            bg.addColorStop(0.5, tier >= 2 ? '#331166' : c2);
+            bg.addColorStop(1, '#110022');
+            ctx.fillStyle = bg;
+            ctx.shadowBlur = tier >= 2 ? 20 : 10 + tier * 4;
+            ctx.shadowColor = tier >= 2 ? '#aa66ff' : c1;
+
+            if (tier === 0) {
+                // F-117 style — flat angular facets
+                ctx.beginPath();
+                ctx.moveTo(cx, ty + 4);                  // nose point
+                ctx.lineTo(cx + 8, ty + h * 0.2);        // right facet
+                ctx.lineTo(rx + 4, ty + h * 0.55);       // right wing
+                ctx.lineTo(rx, ty + h * 0.65);
+                ctx.lineTo(cx + 10, ty + h * 0.6);
+                ctx.lineTo(cx + 8, by);
+                ctx.lineTo(cx - 8, by);
+                ctx.lineTo(cx - 10, ty + h * 0.6);
+                ctx.lineTo(lx, ty + h * 0.65);
+                ctx.lineTo(lx - 4, ty + h * 0.55);
+                ctx.lineTo(cx - 8, ty + h * 0.2);
+                ctx.closePath();
+                ctx.fill();
+                // Facet lines
+                panelLine(cx, ty + 4, cx + 8, ty + h * 0.2, 0.2);
+                panelLine(cx, ty + 4, cx - 8, ty + h * 0.2, 0.2);
+                panelLine(cx + 8, ty + h * 0.2, cx + 10, ty + h * 0.6, 0.15);
+                panelLine(cx - 8, ty + h * 0.2, cx - 10, ty + h * 0.6, 0.15);
+                panelLine(cx - 8, ty + h * 0.4, cx + 8, ty + h * 0.4, 0.12);
+            } else if (tier === 1) {
+                // Mk-II: B-2 flying wing style — very wide, thin
+                ctx.beginPath();
+                ctx.moveTo(cx, ty);
+                ctx.lineTo(cx + 6, ty + h * 0.1);
+                ctx.lineTo(rx + 12, ty + h * 0.45);     // wide right wing
+                ctx.lineTo(rx + 14, ty + h * 0.5);
+                ctx.lineTo(rx + 8, ty + h * 0.58);
+                ctx.lineTo(cx + 10, ty + h * 0.55);
+                ctx.lineTo(cx + 8, by);
+                ctx.lineTo(cx + 10, by + 4);             // right tail notch
+                ctx.lineTo(cx + 4, by - 2);
+                ctx.lineTo(cx - 4, by - 2);
+                ctx.lineTo(cx - 10, by + 4);
+                ctx.lineTo(cx - 8, by);
+                ctx.lineTo(cx - 10, ty + h * 0.55);
+                ctx.lineTo(lx - 8, ty + h * 0.58);
+                ctx.lineTo(lx - 14, ty + h * 0.5);
+                ctx.lineTo(lx - 12, ty + h * 0.45);
+                ctx.lineTo(cx - 6, ty + h * 0.1);
+                ctx.closePath();
+                ctx.fill();
+                panelLine(cx, ty, rx + 12, ty + h * 0.45, 0.18);
+                panelLine(cx, ty, lx - 12, ty + h * 0.45, 0.18);
+                panelLine(cx - 6, ty + h * 0.35, cx + 6, ty + h * 0.35, 0.12);
+            } else {
+                // Tier 2 Shadow — near-transparent with holographic edge lines
+                ctx.beginPath();
+                ctx.moveTo(cx, ty - 4);
+                ctx.lineTo(cx + 8, ty + h * 0.08);
+                ctx.lineTo(rx + 16, ty + h * 0.4);
+                ctx.lineTo(rx + 18, ty + h * 0.46);
+                ctx.lineTo(rx + 10, ty + h * 0.56);
+                ctx.lineTo(cx + 12, ty + h * 0.52);
+                ctx.lineTo(cx + 10, by);
+                ctx.lineTo(cx + 14, by + 6);
+                ctx.lineTo(cx + 5, by - 2);
+                ctx.lineTo(cx - 5, by - 2);
+                ctx.lineTo(cx - 14, by + 6);
+                ctx.lineTo(cx - 10, by);
+                ctx.lineTo(cx - 12, ty + h * 0.52);
+                ctx.lineTo(lx - 10, ty + h * 0.56);
+                ctx.lineTo(lx - 18, ty + h * 0.46);
+                ctx.lineTo(lx - 16, ty + h * 0.4);
+                ctx.lineTo(cx - 8, ty + h * 0.08);
+                ctx.closePath();
+                ctx.fill();
+                // Holographic edge glow
+                const hue = (t / 10) % 360;
+                ctx.strokeStyle = `hsla(${hue}, 100%, 70%, 0.6)`;
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(cx, ty - 4);
+                ctx.lineTo(rx + 18, ty + h * 0.46);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(cx, ty - 4);
+                ctx.lineTo(lx - 18, ty + h * 0.46);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(rx + 10, ty + h * 0.56);
+                ctx.lineTo(cx + 14, by + 6);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(lx - 10, ty + h * 0.56);
+                ctx.lineTo(cx - 14, by + 6);
+                ctx.stroke();
+                // Inner holographic grid
+                ctx.strokeStyle = `hsla(${(hue + 120) % 360}, 80%, 60%, 0.15)`;
+                ctx.lineWidth = 0.5;
+                for (let i = 0.2; i < 0.8; i += 0.15) {
+                    panelLine(cx - 10, ty + h * i, cx + 10, ty + h * i, 0.08);
+                }
+            }
+
+            if (tier >= 2) {
+                ctx.restore(); // restore shimmer alpha
+            }
+
+            // Cockpit — sensor slit
+            ctx.fillStyle = tier >= 2 ? `hsla(${(t / 8) % 360}, 100%, 70%, 0.8)` : '#bbaaff';
+            ctx.shadowBlur = 6 + tier * 3;
+            ctx.shadowColor = '#8844ff';
+            ctx.beginPath();
+            ctx.ellipse(cx, ty + 14 + tier, 3 + tier, 6 + tier, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+        } else if (trait === 'ultimate') {
+            // ── NISHITANI BREAKER — the ultimate ship ──
+            const pulse = Math.sin(t / 200) * 0.15 + 0.85;
+            const engineR = 12 + tier * 5 + flicker * 6;
+
+            // Golden engine array
+            drawEngineGlow(cx, by + 5, engineR * 1.5, '#ffffff', '#ffdd00');
+            drawEngineGlow(cx - 12, by + 3, engineR, '#ffcc44', '#ff4400');
+            drawEngineGlow(cx + 12, by + 3, engineR, '#ffcc44', '#ff4400');
+            if (tier >= 1) {
+                drawEngineGlow(cx - 20, by + 2, engineR * 0.7, '#ffaa00', '#aa4400');
+                drawEngineGlow(cx + 20, by + 2, engineR * 0.7, '#ffaa00', '#aa4400');
+            }
+
+            // Golden aura
+            ctx.save();
+            ctx.globalAlpha = pulse * 0.25;
+            const auraG = ctx.createRadialGradient(cx, cy, 5, cx, cy, 40 + tier * 8);
+            auraG.addColorStop(0, '#ffdd00');
+            auraG.addColorStop(0.5, '#ff8800');
+            auraG.addColorStop(1, 'transparent');
+            ctx.fillStyle = auraG;
+            ctx.beginPath();
+            ctx.arc(cx, cy, 40 + tier * 8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+
+            const bg = ctx.createLinearGradient(lx, ty, rx, by);
+            bg.addColorStop(0, '#ffee44');
+            bg.addColorStop(0.3, '#ffaa00');
+            bg.addColorStop(0.6, '#cc4400');
+            bg.addColorStop(1, '#441100');
+            ctx.fillStyle = bg;
+            ctx.shadowBlur = 20 + tier * 8;
+            ctx.shadowColor = '#ffdd00';
+
+            if (tier === 0) {
+                // Base NISHITANI — ornate golden fighter
+                ctx.beginPath();
+                ctx.moveTo(cx, ty - 4);
+                ctx.lineTo(cx + 6, ty + h * 0.1);
+                ctx.lineTo(cx + 12, ty + h * 0.2);
+                ctx.lineTo(rx + 8, ty + h * 0.55);
+                ctx.lineTo(rx + 10, ty + h * 0.62);
+                ctx.lineTo(rx + 6, ty + h * 0.72);
+                ctx.lineTo(cx + 14, ty + h * 0.68);
+                ctx.lineTo(cx + 12, by);
+                ctx.lineTo(cx - 12, by);
+                ctx.lineTo(cx - 14, ty + h * 0.68);
+                ctx.lineTo(lx - 6, ty + h * 0.72);
+                ctx.lineTo(lx - 10, ty + h * 0.62);
+                ctx.lineTo(lx - 8, ty + h * 0.55);
+                ctx.lineTo(cx - 12, ty + h * 0.2);
+                ctx.lineTo(cx - 6, ty + h * 0.1);
+                ctx.closePath();
+                ctx.fill();
+            } else if (tier === 1) {
+                // N-BREAKER EX — expanded wings, more weapon pods
+                ctx.beginPath();
+                ctx.moveTo(cx, ty - 8);
+                ctx.lineTo(cx + 8, ty + h * 0.08);
+                ctx.lineTo(cx + 14, ty + h * 0.18);
+                ctx.lineTo(rx + 14, ty + h * 0.48);
+                ctx.lineTo(rx + 16, ty + h * 0.56);
+                ctx.lineTo(rx + 10, ty + h * 0.68);
+                ctx.lineTo(cx + 16, ty + h * 0.64);
+                ctx.lineTo(cx + 14, by + 2);
+                ctx.lineTo(cx + 16, by + 6);            // right tail
+                ctx.lineTo(cx + 10, by);
+                ctx.lineTo(cx - 10, by);
+                ctx.lineTo(cx - 16, by + 6);
+                ctx.lineTo(cx - 14, by + 2);
+                ctx.lineTo(cx - 16, ty + h * 0.64);
+                ctx.lineTo(lx - 10, ty + h * 0.68);
+                ctx.lineTo(lx - 16, ty + h * 0.56);
+                ctx.lineTo(lx - 14, ty + h * 0.48);
+                ctx.lineTo(cx - 14, ty + h * 0.18);
+                ctx.lineTo(cx - 8, ty + h * 0.08);
+                ctx.closePath();
+                ctx.fill();
+                drawWeaponPod(rx + 12, ty + h * 0.52, 3);
+                drawWeaponPod(lx - 12, ty + h * 0.52, 3);
+            } else {
+                // N-BREAKER OMEGA — the ultimate form
+                ctx.beginPath();
+                ctx.moveTo(cx, ty - 12);
+                ctx.lineTo(cx + 10, ty + h * 0.05);
+                ctx.lineTo(cx + 16, ty + h * 0.15);
+                // Right forward-swept canard
+                ctx.lineTo(rx + 10, ty + h * 0.08);
+                ctx.lineTo(rx + 12, ty + h * 0.14);
+                ctx.lineTo(cx + 16, ty + h * 0.22);
+                // Right main wing
+                ctx.lineTo(rx + 20, ty + h * 0.45);
+                ctx.lineTo(rx + 22, ty + h * 0.52);
+                ctx.lineTo(rx + 16, ty + h * 0.62);
+                ctx.lineTo(cx + 18, ty + h * 0.58);
+                // Right rear stabilizer
+                ctx.lineTo(rx + 8, ty + h * 0.82);
+                ctx.lineTo(rx + 6, ty + h * 0.88);
+                ctx.lineTo(cx + 16, ty + h * 0.78);
+                ctx.lineTo(cx + 16, by + 2);
+                ctx.lineTo(cx + 18, by + 8);
+                ctx.lineTo(cx + 10, by);
+                // Bottom center
+                ctx.lineTo(cx - 10, by);
+                ctx.lineTo(cx - 18, by + 8);
+                ctx.lineTo(cx - 16, by + 2);
+                ctx.lineTo(cx - 16, ty + h * 0.78);
+                ctx.lineTo(lx - 6, ty + h * 0.88);
+                ctx.lineTo(lx - 8, ty + h * 0.82);
+                ctx.lineTo(cx - 18, ty + h * 0.58);
+                ctx.lineTo(lx - 16, ty + h * 0.62);
+                ctx.lineTo(lx - 22, ty + h * 0.52);
+                ctx.lineTo(lx - 20, ty + h * 0.45);
+                ctx.lineTo(cx - 16, ty + h * 0.22);
+                ctx.lineTo(lx - 12, ty + h * 0.14);
+                ctx.lineTo(lx - 10, ty + h * 0.08);
+                ctx.lineTo(cx - 16, ty + h * 0.15);
+                ctx.lineTo(cx - 10, ty + h * 0.05);
+                ctx.closePath();
+                ctx.fill();
+
+                // Ornate gold trim lines
+                ctx.strokeStyle = 'rgba(255,255,200,0.35)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(cx, ty - 12);
+                ctx.lineTo(rx + 22, ty + h * 0.52);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(cx, ty - 12);
+                ctx.lineTo(lx - 22, ty + h * 0.52);
+                ctx.stroke();
+
+                // Multiple weapon pods
+                drawWeaponPod(rx + 18, ty + h * 0.48, 4);
+                drawWeaponPod(lx - 18, ty + h * 0.48, 4);
+                drawWeaponPod(rx + 5, ty + h * 0.85, 3);
+                drawWeaponPod(lx - 5, ty + h * 0.85, 3);
+                // Shield generator domes
+                ctx.fillStyle = '#ffee88';
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = '#ffdd00';
+                ctx.beginPath();
+                ctx.arc(cx - 12, ty + h * 0.2, 3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(cx + 12, ty + h * 0.2, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Panel lines
+            panelLine(cx, ty, cx, by - 6, 0.12);
+            panelLine(cx - 10, ty + h * 0.3, cx + 10, ty + h * 0.3, 0.1);
+            panelLine(cx - 12, ty + h * 0.55, cx + 12, ty + h * 0.55, 0.1);
+
+            // "N" emblem on hull
             ctx.fillStyle = '#ffffff';
             ctx.shadowBlur = 10;
-            ctx.shadowColor = '#ffffff';
+            ctx.shadowColor = '#ffdd00';
+            ctx.font = "bold 9px 'Press Start 2P', monospace";
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('N', cx, cy + 2);
+            ctx.textBaseline = 'alphabetic';
+
+            // Cockpit — ornate golden
+            ctx.fillStyle = '#ffffcc';
+            ctx.shadowBlur = 12;
+            ctx.shadowColor = '#ffdd00';
             ctx.beginPath();
-            ctx.arc(this.x - 5, this.y + this.height * 0.87, 3, 0, Math.PI * 2);
+            ctx.ellipse(cx, ty + 12 + tier * 2, 5 + tier * 2, 8 + tier * 2, 0, 0, Math.PI * 2);
             ctx.fill();
+
+        } else {
+            // ── FALLBACK (unknown trait) — generic fighter ──
+            const engineR = 7 + tier * 3 + flicker * 4;
+            drawEngineGlow(cx, by + 3, engineR, '#ffffff', c1);
+
+            const bg = ctx.createLinearGradient(lx, ty, rx, by);
+            bg.addColorStop(0, c1);
+            bg.addColorStop(0.5, c2);
+            bg.addColorStop(1, '#222');
+            ctx.fillStyle = bg;
+            ctx.shadowBlur = 12 + tier * 5;
+            ctx.shadowColor = c1;
+
             ctx.beginPath();
-            ctx.arc(this.x + this.width + 5, this.y + this.height * 0.87, 3, 0, Math.PI * 2);
+            ctx.moveTo(cx, ty);
+            ctx.lineTo(rx + tier * 4, ty + h * 0.85);
+            ctx.lineTo(cx + 5, by);
+            ctx.lineTo(cx, ty + h * 0.65);
+            ctx.lineTo(cx - 5, by);
+            ctx.lineTo(lx - tier * 4, ty + h * 0.85);
+            ctx.closePath();
+            ctx.fill();
+
+            // Cockpit
+            ctx.fillStyle = '#aaeeff';
+            ctx.shadowBlur = 6;
+            ctx.shadowColor = '#aaeeff';
+            ctx.beginPath();
+            ctx.ellipse(cx, ty + 16, 5, 10, 0, 0, Math.PI * 2);
             ctx.fill();
         }
 
-        // Cockpit glow
-        ctx.fillStyle = tier >= 2 ? '#ffffff' : '#aaeeff';
-        ctx.shadowBlur = tier >= 2 ? 15 : 5;
-        ctx.shadowColor = tier >= 2 ? '#00ffff' : '#aaeeff';
-        ctx.beginPath();
-        const cockpitH = tier >= 1 ? 14 : 12;
-        ctx.ellipse(cx, this.y + 18 - tier * 2, 6 + tier * 2, cockpitH, 0, 0, Math.PI * 2);
-        ctx.fill();
         ctx.restore();
 
-        // NISHITANI BREAKER special glow
+        // ── NISHITANI BREAKER outer aura ring + "N" below ship ──
         if (this.shipType === 'nishitaniBreaker') {
             ctx.save();
-            const pulse = Math.sin(performance.now() / 200) * 0.3 + 0.5;
+            const pulse = Math.sin(t / 200) * 0.3 + 0.5;
             ctx.globalAlpha = pulse;
             ctx.strokeStyle = '#ffdd00';
             ctx.lineWidth = 2;
             ctx.shadowBlur = 20;
             ctx.shadowColor = '#ffdd00';
             ctx.beginPath();
-            ctx.arc(cx, cy, 35, 0, Math.PI * 2);
+            ctx.arc(cx, cy, 35 + tier * 4, 0, Math.PI * 2);
             ctx.stroke();
-            // "N" emblem
+            // Secondary ring
+            ctx.strokeStyle = '#ff4400';
+            ctx.lineWidth = 1;
+            ctx.globalAlpha = pulse * 0.5;
+            ctx.beginPath();
+            ctx.arc(cx, cy, 40 + tier * 4, 0, Math.PI * 2);
+            ctx.stroke();
+            // "N" emblem below
+            ctx.globalAlpha = pulse;
             ctx.fillStyle = '#ffdd00';
             ctx.font = "bold 10px 'Press Start 2P', monospace";
             ctx.textAlign = 'center';
-            ctx.fillText('N', cx, this.y + this.height + 15);
+            ctx.fillText('N', cx, by + 18);
             ctx.restore();
         }
 
-        // Shield
+        // ── Shield ──
         if (this.hasShield) {
             ctx.save();
             ctx.strokeStyle = 'cyan';
@@ -566,10 +1568,10 @@ export class Player {
             ctx.restore();
         }
 
-        // Force field
+        // ── Force field ──
         if (this.forceFieldActive) {
             ctx.save();
-            const pulse = Math.sin(performance.now() / 100) * 0.2 + 0.5;
+            const pulse = Math.sin(t / 100) * 0.2 + 0.5;
             ctx.globalAlpha = pulse;
             ctx.strokeStyle = '#ffdd00';
             ctx.lineWidth = 4;
@@ -581,14 +1583,14 @@ export class Player {
             ctx.restore();
         }
 
-        // Weapon level + evolution name
+        // ── Weapon level text ──
         ctx.save();
         ctx.fillStyle = WEAPON_PATHS[this.weaponPath] ? WEAPON_PATHS[this.weaponPath].color : '#fff';
         ctx.shadowBlur = 5;
         ctx.shadowColor = ctx.fillStyle;
         ctx.font = "8px 'Press Start 2P', monospace";
         ctx.textAlign = 'center';
-        ctx.fillText('Lv.' + this.weaponLevel, cx, this.y - 5);
+        ctx.fillText('Lv.' + this.weaponLevel, cx, ty - 5);
         ctx.restore();
     }
 }
