@@ -5,8 +5,9 @@ export class Enemy {
         this.game = game;
         this.x = x;
         this.y = y;
-        this.width = 40;
-        this.height = 40;
+        const scale = game.mobileScale || 1;
+        this.width = Math.floor(40 * scale);
+        this.height = Math.floor(40 * scale);
         this.speedX = 1;
         this.speedY = 0.5;
         this.hp = 1;

@@ -25,7 +25,16 @@ export default function GameCanvas() {
         if (gameRef.current) {
             const state = gameRef.current.gameState;
             if (state === 'GAMEOVER' || state === 'VICTORY') {
-                gameRef.current.restart();
+                if (gameRef.current.gameOverCooldown <= 0) {
+                    gameRef.current.restart();
+                }
+            } else if (state === 'DIFFICULTY_SELECT') {
+                const keyMap = { left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp', down: 'ArrowDown', fire: 'Enter' };
+                const key = keyMap[action];
+                if (key) {
+                    gameRef.current.input.injectKey(key, true);
+                    setTimeout(() => gameRef.current?.input.injectKey(key, false), 100);
+                }
             } else if (state === 'START' && action === 'fire') {
                 gameRef.current.input.injectKey('Enter', true);
                 setTimeout(() => gameRef.current?.input.injectKey('Enter', false), 100);

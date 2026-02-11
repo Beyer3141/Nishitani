@@ -3,7 +3,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 // ---------- Constants ----------
 const JOYSTICK_RADIUS = 60;
 const KNOB_RADIUS = 20;
-const DEAD_ZONE = 12;
+const DEAD_ZONE = 8;
 
 // ---------- Virtual Joystick ----------
 function VirtualJoystick({ onTouchStart, onTouchEnd }) {

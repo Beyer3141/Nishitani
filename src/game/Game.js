@@ -7,13 +7,14 @@ import { SoundManager } from './SoundManager';
 import { Background } from './Background';
 import { WaveManager } from './WaveManager';
 import { createBoss } from './BossTypes';
+import { ENEMY_QUOTES } from './EnemyTypes';
 import { GrazeMechanic } from './GrazeMechanic';
 import { HUD } from './HUD';
 import { ShopManager } from './ShopManager';
 import { DialogueSystem } from './DialogueSystem';
 import { getStageForWave, getMaxWave } from './StageData';
 
-// States: START, SHIP_SELECT, PLAYING, BOSS_INTRO, BOSS_BATTLE, WAVE_CLEAR, SHOP, GAMEOVER, PAUSED
+// States: START, SHIP_SELECT, DIFFICULTY_SELECT, PLAYING, BOSS_INTRO, BOSS_BATTLE, WAVE_CLEAR, SHOP, GAMEOVER, PAUSED
 export class Game {
     constructor(canvas) {
         this.canvas = canvas;
@@ -66,6 +67,25 @@ export class Game {
         // Control overlay height (touch controls area at bottom)
         this.controlAreaHeight = 120;
 
+        // Mobile detection & scaling
+        this._isMobile = window.innerWidth < 768;
+        this.mobileScale = this._isMobile ? 0.65 : 1.0;
+        this.mobileBulletSpeedScale = this._isMobile ? 0.85 : 1.0;
+
+        // Difficulty system
+        this.difficulty = 'NORMAL';
+        this.difficultySettings = {
+            EASY:      { hpMult: 0.7, bulletSpeedMult: 0.8, scoreMult: 1.0, extraLives: 2, enemySizeMult: 1.0, label: 'EASY' },
+            NORMAL:    { hpMult: 1.0, bulletSpeedMult: 1.0, scoreMult: 1.0, extraLives: 0, enemySizeMult: 1.0, label: 'NORMAL' },
+            HARD:      { hpMult: 1.5, bulletSpeedMult: 1.2, scoreMult: 1.5, extraLives: 0, enemySizeMult: 1.0, label: 'HARD' },
+            NISHITANI: { hpMult: 2.0, bulletSpeedMult: 1.5, scoreMult: 3.0, extraLives: 0, enemySizeMult: 1.15, label: '西谷' },
+        };
+        this.selectedDifficultyIndex = 1;
+        this.useNewGamePlus = true; // Whether to load saved progress
+
+        // Game over cooldown (prevent accidental tap)
+        this.gameOverCooldown = 0;
+
         // Boss intro timer
         this.bossIntroTimer = 0;
 
@@ -115,13 +135,35 @@ export class Game {
                     const shipY = this.height / 2 - 60 + i * 60;
                     if (y > shipY - 25 && y < shipY + 35) {
                         this.selectedShip = shipKeys[i];
-                        this.startGame();
+                        this.gameState = 'DIFFICULTY_SELECT';
+                        this.sound.playMenuConfirm();
                         return;
                     }
                 }
             }
 
+            if (this.gameState === 'DIFFICULTY_SELECT') {
+                // Handle click on difficulty options
+                const diffKeys = ['EASY', 'NORMAL', 'HARD', 'NISHITANI'];
+                for (let i = 0; i < diffKeys.length; i++) {
+                    const dy = this.height / 2 - 60 + i * 50;
+                    if (y > dy - 20 && y < dy + 25) {
+                        this.difficulty = diffKeys[i];
+                        this.selectedDifficultyIndex = i;
+                        this.startGame();
+                        return;
+                    }
+                }
+                // NG+ toggle area
+                const ngpY = this.height / 2 - 60 + 4 * 50 + 20;
+                if (y > ngpY - 15 && y < ngpY + 25) {
+                    this.useNewGamePlus = !this.useNewGamePlus;
+                    this.sound.playMenuSelect();
+                }
+            }
+
             if (this.gameState === 'GAMEOVER' || this.gameState === 'VICTORY') {
+                if (this.gameOverCooldown > 0) return; // Prevent accidental tap
                 this.restart();
             }
         };
@@ -176,39 +218,43 @@ export class Game {
         this.shakeDuration = 0;
         this.gameOver = false;
 
+        // Apply difficulty extra lives
+        const diff = this.getDifficulty();
+        this.player.lives += diff.extraLives;
+
         this.waveManager.reset();
         this.graze.reset();
         this.dialogue.reset();
 
-        // New Game+ (強くてニューゲーム): load saved upgrade data
-        const saved = this.loadProgress();
-        if (saved) {
-            // Restore weapon level
-            if (saved.weaponLevel && saved.weaponLevel > 1) {
-                for (let i = 1; i < saved.weaponLevel; i++) {
-                    this.player.upgradeWeapon();
+        // New Game+ (強くてニューゲーム): load saved upgrade data only if enabled
+        if (this.useNewGamePlus) {
+            const saved = this.loadProgress();
+            if (saved) {
+                if (saved.weaponLevel && saved.weaponLevel > 1) {
+                    for (let i = 1; i < saved.weaponLevel; i++) {
+                        this.player.upgradeWeapon();
+                    }
                 }
-            }
-            // Restore speed and damage bonuses
-            if (saved.speedBonus) this.player.speedBonus = saved.speedBonus;
-            if (saved.damageBonus) this.player.damageBonus = saved.damageBonus;
-            // Restore shop purchase history
-            if (saved.shopHistory) {
-                this.shop.purchaseHistory = { ...saved.shopHistory };
-                this.shop.selectedIndex = 0;
+                if (saved.speedBonus) this.player.speedBonus = saved.speedBonus;
+                if (saved.damageBonus) this.player.damageBonus = saved.damageBonus;
+                if (saved.shopHistory) {
+                    this.shop.purchaseHistory = { ...saved.shopHistory };
+                    this.shop.selectedIndex = 0;
+                } else {
+                    this.shop.reset();
+                }
+                if (saved.nishitaniBreakerPurchased) {
+                    this.shop.nishitaniBreakerPurchased = true;
+                    this.shop.nishitaniBreakerUnlocked = true;
+                }
+                if (saved.highScore && saved.highScore > this.highScore) {
+                    this.highScore = saved.highScore;
+                }
             } else {
                 this.shop.reset();
             }
-            // Restore Nishitani Breaker state
-            if (saved.nishitaniBreakerPurchased) {
-                this.shop.nishitaniBreakerPurchased = true;
-                this.shop.nishitaniBreakerUnlocked = true;
-            }
-            // Restore high score if higher
-            if (saved.highScore && saved.highScore > this.highScore) {
-                this.highScore = saved.highScore;
-            }
         } else {
+            // Fresh start — no upgrades carried over
             this.shop.reset();
         }
 
@@ -268,8 +314,17 @@ export class Game {
         this.homingBullets.push(new HomingBullet(this, x, y, damage));
     }
 
+    get isMobile() {
+        return this._isMobile;
+    }
+
+    getDifficulty() {
+        return this.difficultySettings[this.difficulty] || this.difficultySettings.NORMAL;
+    }
+
     getEnemyBulletSpeedMultiplier() {
-        return 1 + (this.waveManager.wave - 1) * 0.04;
+        const base = 1 + (this.waveManager.wave - 1) * 0.04;
+        return base * this.mobileBulletSpeedScale * this.getDifficulty().bulletSpeedMult;
     }
 
     shakeScreen(intensity, duration) {
@@ -379,6 +434,12 @@ export class Game {
             return;
         }
 
+        if (this.gameState === 'DIFFICULTY_SELECT') {
+            this._handleDifficultySelect(input);
+            input.clearFrame();
+            return;
+        }
+
         if (this.gameState === 'SHOP') {
             const result = this.shop.handleInput(input);
             if (result === 'continue') {
@@ -396,7 +457,9 @@ export class Game {
         }
 
         if (this.gameState === 'GAMEOVER') {
-            if (input.wasJustPressed('r') || input.wasJustPressed('R')) {
+            if (this.gameOverCooldown > 0) {
+                this.gameOverCooldown -= deltaTime;
+            } else if (input.wasJustPressed('r') || input.wasJustPressed('R')) {
                 this.restart();
             }
             input.clearFrame();
@@ -404,7 +467,9 @@ export class Game {
         }
 
         if (this.gameState === 'VICTORY') {
-            if (input.wasJustPressed('r') || input.wasJustPressed('R')) {
+            if (this.gameOverCooldown > 0) {
+                this.gameOverCooldown -= deltaTime;
+            } else if (input.wasJustPressed('r') || input.wasJustPressed('R')) {
                 this.restart();
             }
             input.clearFrame();
@@ -498,10 +563,10 @@ export class Game {
         // Graze
         this.graze.update();
 
-        // Enemy bullets vs player
+        // Enemy bullets vs player (uses smaller hitbox = 食らい判定)
         if (!this.player.isInvincible) {
             this.enemyBullets.forEach(bullet => {
-                if (this.checkCollision(bullet, this.player)) {
+                if (this.checkPlayerHitCollision(bullet, this.player)) {
                     bullet.markedForDeletion = true;
                     this.handlePlayerHit();
                 }
@@ -538,13 +603,48 @@ export class Game {
         for (let i = 0; i < Math.min(shipKeys.length, 6); i++) {
             if (input.wasJustPressed(String(i + 1))) {
                 this.selectedShip = shipKeys[i];
-                this.startGame();
+                this.gameState = 'DIFFICULTY_SELECT';
+                this.sound.playMenuConfirm();
                 return;
             }
         }
         if (input.wasJustPressed('Enter') || input.wasJustPressed(' ')) {
             this.selectedShip = shipKeys[this.selectedShipIndex];
-            this.startGame();
+            this.gameState = 'DIFFICULTY_SELECT';
+            this.sound.playMenuConfirm();
+        }
+    }
+
+    _handleDifficultySelect(input) {
+        const diffKeys = ['EASY', 'NORMAL', 'HARD', 'NISHITANI'];
+        // Navigation: up/down for difficulty, left/right to toggle NG+
+        if (input.wasJustPressed('ArrowUp') || input.wasJustPressed('w')) {
+            this.selectedDifficultyIndex = Math.max(0, this.selectedDifficultyIndex - 1);
+            this.sound.init();
+            this.sound.playMenuSelect();
+        }
+        if (input.wasJustPressed('ArrowDown') || input.wasJustPressed('s')) {
+            // 5 rows: 4 difficulties + NG+ toggle
+            this.selectedDifficultyIndex = Math.min(4, this.selectedDifficultyIndex + 1);
+            this.sound.init();
+            this.sound.playMenuSelect();
+        }
+        if (input.wasJustPressed('ArrowLeft') || input.wasJustPressed('ArrowRight') ||
+            input.wasJustPressed('a') || input.wasJustPressed('d')) {
+            if (this.selectedDifficultyIndex === 4) {
+                this.useNewGamePlus = !this.useNewGamePlus;
+                this.sound.playMenuSelect();
+            }
+        }
+        if (input.wasJustPressed('Enter') || input.wasJustPressed(' ')) {
+            if (this.selectedDifficultyIndex === 4) {
+                // Toggle NG+
+                this.useNewGamePlus = !this.useNewGamePlus;
+                this.sound.playMenuSelect();
+            } else {
+                this.difficulty = diffKeys[this.selectedDifficultyIndex];
+                this.startGame();
+            }
         }
     }
 
@@ -577,7 +677,12 @@ export class Game {
             // Show boss intro dialogue from stage data
             const stage = getStageForWave(this.waveManager.wave);
             if (stage && stage.dialogue && stage.dialogue.bossIntro) {
-                this.dialogue.show(stage.dialogue.bossIntro.text, stage.dialogue.bossIntro.speaker, 2500);
+                const bi = stage.dialogue.bossIntro;
+                if (Array.isArray(bi)) {
+                    this.dialogue.show(bi);
+                } else {
+                    this.dialogue.show(bi.text, bi.speaker, 2500);
+                }
             }
 
             this.sound.playBossWarning();
@@ -654,8 +759,25 @@ export class Game {
         this.boss = null;
         this.enemyBullets = [];
 
+        // Show boss defeat dialogue if available
+        const stage = getStageForWave(this.waveManager.wave);
+        if (stage && stage.dialogue && stage.dialogue.bossDefeat) {
+            const bd = stage.dialogue.bossDefeat;
+            if (Array.isArray(bd)) {
+                bd.forEach(d => this.dialogue.show(d.text, d.speaker));
+            } else {
+                this.dialogue.show(bd.text, bd.speaker);
+            }
+        }
+
         // Save progress after boss defeat
         this.saveProgress();
+
+        // Apply score multiplier from difficulty
+        const diff = this.getDifficulty();
+        if (diff.scoreMult !== 1.0) {
+            this.score = Math.floor(this.score * diff.scoreMult);
+        }
 
         // Check if final wave -> VICTORY
         if (this.waveManager.wave >= getMaxWave()) {
@@ -714,6 +836,15 @@ export class Game {
             this.createParticles(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, 'yellow', 15);
             this.sound.playExplosion();
 
+            // Enemy death quote (20% chance)
+            if (Math.random() < 0.20 && ENEMY_QUOTES[enemy.type]) {
+                const quotes = ENEMY_QUOTES[enemy.type].death;
+                if (quotes && quotes.length > 0) {
+                    const quote = quotes[Math.floor(Math.random() * quotes.length)];
+                    this.addScorePopup(enemy.x + enemy.width / 2, enemy.y - 10, quote, '#ffaacc');
+                }
+            }
+
             // Power-up drops
             const dropRoll = Math.random();
             if (dropRoll < enemy.dropChance) {
@@ -730,6 +861,19 @@ export class Game {
 
     _handlePowerUpCollisions() {
         if (!this.player) return;
+        // Magnet effect: attract power-ups toward player
+        if (this.player.hasMagnet) {
+            this.powerUps.forEach(p => {
+                const dx = (this.player.x + this.player.width / 2) - p.x;
+                const dy = (this.player.y + this.player.height / 2) - p.y;
+                const dist = Math.hypot(dx, dy);
+                if (dist < 200 && dist > 5) {
+                    const strength = 3;
+                    p.x += (dx / dist) * strength;
+                    p.y += (dy / dist) * strength;
+                }
+            });
+        }
         this.powerUps.forEach(p => {
             if (this.checkCollision(this.player, p)) {
                 p.markedForDeletion = true;
@@ -787,6 +931,7 @@ export class Game {
             if (this.player.lives <= 0) {
                 this.gameOver = true;
                 this.gameState = 'GAMEOVER';
+                this.gameOverCooldown = 2000; // 2 second cooldown before tap to restart
                 this.sound.stopMusic();
                 this.combo = 0;
                 this.saveProgress();
@@ -803,6 +948,7 @@ export class Game {
 
     handleGameVictory() {
         this.gameState = 'VICTORY';
+        this.gameOverCooldown = 2000;
         this.sound.stopMusic();
         this.sound.playWaveClear();
         this.saveProgress();
@@ -890,6 +1036,21 @@ export class Game {
         );
     }
 
+    // Smaller hitbox for player damage detection (食らい判定)
+    checkPlayerHitCollision(bullet, player) {
+        const shrink = 0.35; // player hitbox is 35% of visual size
+        const pw = player.width * shrink;
+        const ph = player.height * shrink;
+        const px = player.x + (player.width - pw) / 2;
+        const py = player.y + (player.height - ph) / 2;
+        return (
+            bullet.x < px + pw &&
+            bullet.x + bullet.width > px &&
+            bullet.y < py + ph &&
+            bullet.y + bullet.height > py
+        );
+    }
+
     draw() {
         const ctx = this.ctx;
         ctx.save();
@@ -912,6 +1073,12 @@ export class Game {
 
         if (this.gameState === 'SHIP_SELECT') {
             this.drawShipSelectScreen();
+            ctx.restore();
+            return;
+        }
+
+        if (this.gameState === 'DIFFICULTY_SELECT') {
+            this.drawDifficultySelectScreen();
             ctx.restore();
             return;
         }
@@ -1117,6 +1284,86 @@ export class Game {
         ctx.restore();
     }
 
+    drawDifficultySelectScreen() {
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#ffdd00';
+        ctx.fillStyle = 'white';
+        ctx.font = "16px 'Press Start 2P', monospace";
+        ctx.textAlign = 'center';
+        ctx.fillText('SELECT DIFFICULTY', this.width / 2, this.height / 2 - 140);
+
+        const diffKeys = ['EASY', 'NORMAL', 'HARD', 'NISHITANI'];
+        const diffColors = ['#00ff88', '#ffffff', '#ff6600', '#ff00ff'];
+        const diffDescs = [
+            'HP 0.7x / 弾速 0.8x / ライフ+2',
+            'ノーマルバランス',
+            'HP 1.5x / 弾速 1.2x / スコア 1.5x',
+            'HP 2x / 弾速 1.5x / スコア 3x / 地獄',
+        ];
+        const diffLabels = ['EASY', 'NORMAL', 'HARD', '西谷'];
+
+        diffKeys.forEach((key, i) => {
+            const y = this.height / 2 - 60 + i * 50;
+            const isSelected = i === this.selectedDifficultyIndex;
+            const color = diffColors[i];
+
+            if (isSelected) {
+                ctx.save();
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
+                ctx.fillRect(this.width / 2 - 180, y - 15, 360, 40);
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = color;
+                ctx.strokeRect(this.width / 2 - 180, y - 15, 360, 40);
+                ctx.restore();
+            }
+
+            ctx.font = "12px 'Press Start 2P', monospace";
+            ctx.fillStyle = isSelected ? color : '#666';
+            ctx.textAlign = 'center';
+            ctx.fillText(diffLabels[i], this.width / 2, y + 3);
+            ctx.font = "7px 'Press Start 2P', monospace";
+            ctx.fillStyle = isSelected ? '#aaa' : '#555';
+            ctx.fillText(diffDescs[i], this.width / 2, y + 18);
+        });
+
+        // NG+ toggle
+        const ngpY = this.height / 2 - 60 + 4 * 50 + 20;
+        const isNgpSelected = this.selectedDifficultyIndex === 4;
+        const hasSave = !!this.loadProgress();
+
+        if (hasSave) {
+            ctx.save();
+            if (isNgpSelected) {
+                ctx.fillStyle = 'rgba(255, 221, 0, 0.06)';
+                ctx.fillRect(this.width / 2 - 180, ngpY - 15, 360, 40);
+                ctx.strokeStyle = '#ffdd00';
+                ctx.lineWidth = 2;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = '#ffdd00';
+                ctx.strokeRect(this.width / 2 - 180, ngpY - 15, 360, 40);
+            }
+            ctx.restore();
+
+            ctx.font = "11px 'Press Start 2P', monospace";
+            ctx.fillStyle = isNgpSelected ? '#ffdd00' : '#888';
+            ctx.textAlign = 'center';
+            ctx.fillText('強くてNEW GAME: ' + (this.useNewGamePlus ? 'ON' : 'OFF'), this.width / 2, ngpY + 3);
+            ctx.font = "7px 'Press Start 2P', monospace";
+            ctx.fillStyle = '#666';
+            ctx.fillText(this.useNewGamePlus ? '前回の強化を引き継ぐ' : 'まっさらからスタート', this.width / 2, ngpY + 18);
+        }
+
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#555';
+        ctx.font = "8px 'Press Start 2P', monospace";
+        ctx.fillText('\u2191\u2193 SELECT  ENTER/TAP CONFIRM', this.width / 2, this.height / 2 + 220);
+        ctx.restore();
+    }
+
     drawGameOverScreen() {
         const ctx = this.ctx;
         const t = performance.now();
@@ -1198,7 +1445,10 @@ export class Game {
 
         ctx.fillStyle = '#888';
         ctx.font = "10px 'Press Start 2P', monospace";
-        if (Math.floor(t / 600) % 2 === 0) {
+        if (this.gameOverCooldown > 0) {
+            ctx.fillStyle = '#555';
+            ctx.fillText('WAIT...', this.width / 2, this.height / 2 + 155);
+        } else if (Math.floor(t / 600) % 2 === 0) {
             ctx.fillText('R / TAP TO RESTART', this.width / 2, this.height / 2 + 155);
         }
         ctx.restore();
@@ -1275,7 +1525,10 @@ export class Game {
         ctx.fillStyle = '#888';
         ctx.font = "10px 'Press Start 2P', monospace";
         ctx.shadowBlur = 0;
-        if (Math.floor(t / 600) % 2 === 0) {
+        if (this.gameOverCooldown > 0) {
+            ctx.fillStyle = '#555';
+            ctx.fillText('WAIT...', this.width / 2, this.height / 2 + 195);
+        } else if (Math.floor(t / 600) % 2 === 0) {
             ctx.fillText('R / TAP TO RESTART', this.width / 2, this.height / 2 + 195);
         }
         ctx.restore();

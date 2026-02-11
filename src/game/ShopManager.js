@@ -7,6 +7,8 @@ const SHOP_ITEMS = [
     { id: 'shield', name: 'シールド', desc: 'Shield', cost: 40, max: 1, apply(p) { if (!p.hasShield) { p.hasShield = true; return true; } return false; } },
     { id: 'speed', name: '速度 UP', desc: 'Speed +1', cost: 15, max: 30, apply(p) { if (p.speedBonus < 30) { p.speedBonus++; return true; } return false; } },
     { id: 'damage', name: '火力 UP', desc: 'Damage +1', cost: 20, max: 30, apply(p) { if (p.damageBonus < 30) { p.damageBonus++; return true; } return false; } },
+    { id: 'magnet', name: '磁石', desc: 'アイテム自動吸引', cost: 30, max: 1, apply(p) { if (!p.hasMagnet) { p.hasMagnet = true; return true; } return false; } },
+    { id: 'fireRate', name: '連射強化', desc: '発射レート+20%', cost: 35, max: 10, apply(p) { if (p.fireRateBonus < 10) { p.fireRateBonus = (p.fireRateBonus || 0) + 1; p.fireDelay = Math.max(50, p.fireDelay * 0.8); return true; } return false; } },
 ];
 
 export class ShopManager {

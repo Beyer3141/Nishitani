@@ -160,8 +160,9 @@ export class EnemyBullet {
         this.y = y;
         this.vx = vx;
         this.vy = vy;
-        this.width = 10;
-        this.height = 10;
+        const scale = game.mobileScale || 1;
+        this.width = Math.floor(10 * scale);
+        this.height = Math.floor(10 * scale);
         this.markedForDeletion = false;
         this.trail = [];
         this.grazed = false;

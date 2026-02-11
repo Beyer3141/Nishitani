@@ -1,4 +1,4 @@
-import { createEnemy } from './EnemyTypes';
+import { createEnemy, ENEMY_QUOTES } from './EnemyTypes';
 
 export const FORMATIONS = {
     line(count, gameWidth, spacing = 70) {
@@ -130,13 +130,29 @@ export class FormationSpawner {
 
     _spawnEnemy(spawn) {
         const enemy = createEnemy(this.enemyType, this.game, spawn.x, spawn.y);
-        if (this.hpMultiplier > 1) {
-            enemy.hp = Math.ceil(enemy.hp * this.hpMultiplier);
+        // Apply difficulty HP multiplier
+        const diff = this.game.getDifficulty ? this.game.getDifficulty() : { hpMult: 1, enemySizeMult: 1 };
+        const totalHpMult = this.hpMultiplier * diff.hpMult;
+        if (totalHpMult !== 1) {
+            enemy.hp = Math.ceil(enemy.hp * totalHpMult);
             enemy.maxHp = enemy.hp;
+        }
+        // Apply difficulty size multiplier
+        if (diff.enemySizeMult && diff.enemySizeMult !== 1) {
+            enemy.width = Math.floor(enemy.width * diff.enemySizeMult);
+            enemy.height = Math.floor(enemy.height * diff.enemySizeMult);
         }
         this.game.enemies.push(enemy);
         if (this.game.waveManager) {
             this.game.waveManager.enemiesAlive++;
+        }
+        // Enemy spawn quote (10% chance, only first enemy of formation)
+        if (this.totalSpawned === 0 && Math.random() < 0.10 && ENEMY_QUOTES[this.enemyType]) {
+            const quotes = ENEMY_QUOTES[this.enemyType].spawn;
+            if (quotes && quotes.length > 0) {
+                const quote = quotes[Math.floor(Math.random() * quotes.length)];
+                this.game.addScorePopup(enemy.x + enemy.width / 2, enemy.y + enemy.height + 10, quote, '#aaddff');
+            }
         }
     }
 

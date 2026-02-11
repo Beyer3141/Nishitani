@@ -34,25 +34,32 @@ export class DialogueSystem {
     }
 
     /**
-     * Show a dialogue message.
-     * @param {string} text - The dialogue text to display
-     * @param {string} speaker - Speaker name (e.g. '西谷', '顔面戦艦', '')
-     * @param {object|number} options - Options object OR legacy duration number (for backward compat)
-     *   options.portrait: 'nishitani' | null - which portrait to show
-     *   options.blocking: boolean - whether to pause the game (default true)
+     * Show dialogue message(s).
+     * @param {string|Array} textOrArray - Single text string OR array of {text, speaker} objects
+     * @param {string} speaker - Speaker name (for single message mode)
+     * @param {object|number} options - Options object OR legacy duration number
      */
-    show(text, speaker = '', options = {}) {
-        // Backward compatibility: if options is a number, treat it as legacy duration (non-blocking timed)
+    show(textOrArray, speaker = '', options = {}) {
         if (typeof options === 'number') {
-            // Legacy callers pass duration as 3rd arg. Convert to new format.
-            // For backward compat, these still block and require manual advance.
             options = {};
+        }
+
+        // Support array of dialogue messages: [{text, speaker}, ...]
+        if (Array.isArray(textOrArray)) {
+            textOrArray.forEach(entry => {
+                const s = entry.speaker || speaker;
+                const portrait = entry.portrait !== undefined ? entry.portrait : this._guessPortrait(s);
+                const blocking = entry.blocking !== undefined ? entry.blocking : true;
+                this.queue.push({ text: entry.text, speaker: s, portrait, blocking });
+            });
+            if (!this.active) this._nextDialogue();
+            return;
         }
 
         const portrait = options.portrait !== undefined ? options.portrait : this._guessPortrait(speaker);
         const blocking = options.blocking !== undefined ? options.blocking : true;
 
-        this.queue.push({ text, speaker, portrait, blocking });
+        this.queue.push({ text: textOrArray, speaker, portrait, blocking });
         if (!this.active) this._nextDialogue();
     }
 

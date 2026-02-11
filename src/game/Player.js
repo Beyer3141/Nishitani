@@ -124,8 +124,9 @@ export class Player {
             this.shipConfig = SHIPS[shipType] || SHIPS.balanced;
         }
 
-        this.width = 35;
-        this.height = 35;
+        const scale = game.mobileScale || 1;
+        this.width = Math.floor(35 * scale);
+        this.height = Math.floor(35 * scale);
         this.x = game.width / 2 - this.width / 2;
         this.y = game.playAreaBottom - this.height - 10;
         this.speed = this.shipConfig.speed;
@@ -169,6 +170,10 @@ export class Player {
         // Speed/damage shop upgrades (max 30 each)
         this.speedBonus = 0;
         this.damageBonus = 0;
+
+        // Shop items
+        this.hasMagnet = false;
+        this.fireRateBonus = 0;
     }
 
     // Evolution tier based on weapon level

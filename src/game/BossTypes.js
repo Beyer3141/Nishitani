@@ -750,6 +750,152 @@ export class FaceBattleshipBoss extends Boss {
     }
 }
 
+// Stage 3.5: Sales Manager Nishitani (営業部長ニシタニ)
+export class SalesManagerBoss extends Boss {
+    constructor(game, level) {
+        super(game, '営業部長ニシタニ', level);
+        this.hp = 200;
+        this.maxHp = this.hp;
+        this.width = 160;
+        this.height = 180;
+        this.attackInterval = 1000;
+        this.meishiTimer = 0;
+        this.phoneTimer = 0;
+        this.phaseDialogueShown = { 2: false, 3: false };
+    }
+
+    update(deltaTime) {
+        super.update(deltaTime);
+        if (!this.entered) return;
+
+        if (this.hpRatio <= 0.30 && this.phase < 3) {
+            this.phase = 3;
+            this.game.shakeScreen(15, 800);
+            if (!this.phaseDialogueShown[3]) {
+                this.phaseDialogueShown[3] = true;
+                this.game.dialogue.show('もう残業代は出ないが…本気を出す！', '営業部長ニシタニ', 2000);
+            }
+        } else if (this.hpRatio <= 0.60 && this.phase < 2) {
+            this.phase = 2;
+            this.game.shakeScreen(10, 500);
+            if (!this.phaseDialogueShown[2]) {
+                this.phaseDialogueShown[2] = true;
+                this.game.dialogue.show('電話営業レーザー、最大出力！', '営業部長ニシタニ', 2000);
+            }
+        }
+
+        const mult = this.game.getEnemyBulletSpeedMultiplier();
+
+        this.meishiTimer += deltaTime;
+        const meishiInterval = this.phase >= 3 ? 400 : this.phase >= 2 ? 600 : 800;
+        if (this.meishiTimer > meishiInterval) {
+            this.meishiTimer = 0;
+            this._meishiAttack(mult);
+        }
+
+        if (this.phase >= 2) {
+            this.phoneTimer += deltaTime;
+            const phoneInterval = this.phase >= 3 ? 1200 : 2000;
+            if (this.phoneTimer > phoneInterval) {
+                this.phoneTimer = 0;
+                this._phoneLaserAttack(mult);
+            }
+        }
+    }
+
+    _meishiAttack(mult) {
+        const cx = this.x + this.width / 2;
+        const bottom = this.y + this.height;
+        const count = 2 + this.phase;
+        for (let i = 0; i < count; i++) {
+            const angle = -Math.PI / 4 + (Math.PI / 2) * (i / Math.max(1, count - 1));
+            const speed = 4 * mult;
+            const bullet = new EnemyBullet(this.game, cx, bottom,
+                Math.cos(angle + Math.PI / 2) * speed,
+                Math.sin(angle + Math.PI / 2) * speed);
+            bullet.width = 14;
+            bullet.height = 8;
+            this.game.enemyBullets.push(bullet);
+        }
+    }
+
+    _phoneLaserAttack(mult) {
+        const cx = this.x + this.width / 2;
+        const cy = this.y + this.height * 0.4;
+        if (this.game.player) {
+            const px = this.game.player.x + this.game.player.width / 2;
+            const py = this.game.player.y;
+            const dx = px - cx;
+            const dy = py - cy;
+            const dist = Math.hypot(dx, dy) || 1;
+            const speed = 7 * mult;
+            for (let i = 0; i < 3; i++) {
+                this.game.enemyBullets.push(new EnemyBullet(this.game, cx, cy,
+                    (dx / dist) * speed + (i - 1) * 1.5,
+                    (dy / dist) * speed));
+            }
+        }
+    }
+
+    attack() {}
+
+    draw(ctx) {
+        const bob = Math.sin(this.angle) * 3;
+
+        ctx.save();
+        ctx.fillStyle = '#2a2a3a';
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#00ff88';
+        ctx.fillRect(this.x + 30, this.y + bob + 80, this.width - 60, this.height - 80);
+
+        ctx.fillStyle = '#ff4444';
+        ctx.fillRect(this.x + this.width / 2 - 6, this.y + bob + 80, 12, 60);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(this.x + this.width / 2 - 25, this.y + bob + 80);
+        ctx.lineTo(this.x + this.width / 2, this.y + bob + 95);
+        ctx.lineTo(this.x + this.width / 2 + 25, this.y + bob + 80);
+        ctx.fill();
+
+        if (this.image.complete && this.image.naturalWidth > 0) {
+            ctx.drawImage(this.image, this.x + this.width / 2 - 40, this.y + bob, 80, 80);
+        }
+
+        if (this.phase >= 2) {
+            ctx.fillStyle = '#333';
+            ctx.fillRect(this.x + this.width - 35, this.y + bob + 90, 15, 30);
+            ctx.fillStyle = '#00ff88';
+            ctx.fillRect(this.x + this.width - 33, this.y + bob + 92, 11, 20);
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#00ff88';
+            ctx.strokeStyle = '#00ff88';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(this.x + this.width - 35, this.y + bob + 90, 15, 30);
+        }
+
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(this.x + 35, this.y + bob + 85, 40, 15);
+        ctx.fillStyle = '#333';
+        ctx.font = "6px Arial";
+        ctx.textAlign = 'center';
+        ctx.fillText('営業部長', this.x + 55, this.y + bob + 95);
+
+        ctx.restore();
+
+        if (this.hpRatio < 0.3) {
+            ctx.save();
+            ctx.globalAlpha = 0.2 + Math.sin(performance.now() / 100) * 0.15;
+            ctx.fillStyle = 'red';
+            ctx.fillRect(this.x, this.y + bob, this.width, this.height);
+            ctx.restore();
+        }
+
+        this._drawHpBar(ctx, bob);
+    }
+}
+
 // ========== Boss Factory ==========
 
 export function createBoss(game, waveNumber) {
@@ -760,6 +906,7 @@ export function createBoss(game, waveNumber) {
         case 'giantTshirt': return new GiantTshirtBoss(game, 0);
         case 'nishitaniRobo': return new NishitaniRoboBoss(game, 0);
         case 'fleetCommander': return new FleetCommanderBoss(game, 0);
+        case 'salesManager': return new SalesManagerBoss(game, 0);
         case 'emperor': return new EmperorBoss(game, 0);
         case 'faceBattleship': return new FaceBattleshipBoss(game, 0);
         default: return new SentinelBoss(game, 0);

@@ -52,11 +52,12 @@ export class WaveManager {
         if (stage && stage.id !== this.previousStageId) {
             this.previousStageId = stage.id;
             if (stage.dialogue && stage.dialogue.stageStart && this.game.dialogue) {
-                this.game.dialogue.show(
-                    stage.dialogue.stageStart.text,
-                    stage.dialogue.stageStart.speaker,
-                    3000
-                );
+                const ds = stage.dialogue.stageStart;
+                if (Array.isArray(ds)) {
+                    this.game.dialogue.show(ds);
+                } else {
+                    this.game.dialogue.show(ds.text, ds.speaker);
+                }
             }
         }
 

@@ -67,6 +67,14 @@ const THEMES = {
             { speed: 0.1, count: 20, sizeRange: [1, 3], alphaRange: [0.05, 0.15], color: '#ccccdd' },
         ]
     },
+    office: {
+        gradient: ['#1a1a2a', '#2a2a3a'],
+        layers: [
+            { speed: 0.15, count: 8, sizeRange: [30, 60], alphaRange: [0.04, 0.08], color: '#334455', type: 'conveyor' },
+            { speed: 0.3, count: 15, sizeRange: [2, 5], alphaRange: [0.1, 0.2], color: '#ffddaa' },
+            { speed: 0.5, count: 25, sizeRange: [1, 2], alphaRange: [0.3, 0.5], color: '#88aacc' },
+        ]
+    },
 };
 
 export class Background {

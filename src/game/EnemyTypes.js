@@ -136,8 +136,9 @@ export class TankEnemy extends Enemy {
     constructor(game, x, y) {
         super(game, x, y);
         this.type = 'tank';
-        this.width = 55;
-        this.height = 55;
+        const scale = game.mobileScale || 1;
+        this.width = Math.floor(55 * scale);
+        this.height = Math.floor(55 * scale);
         this.hp = 8;
         this.maxHp = 8;
         this.scoreValue = 10;
@@ -164,8 +165,9 @@ export class SwarmEnemy extends Enemy {
     constructor(game, x, y) {
         super(game, x, y);
         this.type = 'swarm';
-        this.width = 25;
-        this.height = 25;
+        const scale = game.mobileScale || 1;
+        this.width = Math.floor(25 * scale);
+        this.height = Math.floor(25 * scale);
         this.hp = 1;
         this.maxHp = 1;
         this.scoreValue = 1;
@@ -225,8 +227,9 @@ export class MeishiEnemy extends Enemy {
     constructor(game, x, y) {
         super(game, x, y);
         this.type = 'meishi';
-        this.width = 50;
-        this.height = 28;
+        const scale = game.mobileScale || 1;
+        this.width = Math.floor(50 * scale);
+        this.height = Math.floor(28 * scale);
         this.hp = 2;
         this.maxHp = 2;
         this.scoreValue = 4;
@@ -315,8 +318,9 @@ export class CloneEnemy extends Enemy {
         super(game, x, y);
         this.type = 'clone';
         this.isSmall = isSmall;
-        this.width = isSmall ? 25 : 38;
-        this.height = isSmall ? 25 : 38;
+        const scale = game.mobileScale || 1;
+        this.width = Math.floor((isSmall ? 25 : 38) * scale);
+        this.height = Math.floor((isSmall ? 25 : 38) * scale);
         this.hp = isSmall ? 1 : 3;
         this.maxHp = this.hp;
         this.scoreValue = isSmall ? 2 : 5;
@@ -398,6 +402,273 @@ export class CloneEnemy extends Enemy {
     }
 }
 
+// ========== New Enemy Types ==========
+
+export class SniperEnemy extends Enemy {
+    constructor(game, x, y) {
+        super(game, x, y);
+        this.type = 'sniper';
+        this.hp = 2;
+        this.maxHp = 2;
+        this.scoreValue = 6;
+        this.speedY = 0.3;
+        this.hoverY = 40 + Math.random() * 80;
+        this.hovering = false;
+        this.aimTimer = 0;
+        this.aimDuration = 1500;
+        this.aiming = false;
+        this.aimTarget = { x: 0, y: 0 };
+        this.shootCooldown = 3000;
+        this.shootTimer = 0;
+    }
+
+    update(deltaTime) {
+        if (!this.hovering) {
+            this.y += 2;
+            if (this.y >= this.hoverY) {
+                this.hovering = true;
+                // Snap to left or right edge
+                this.x = this.x < this.game.width / 2 ? 10 : this.game.width - this.width - 10;
+            }
+        }
+        if (this.hovering) {
+            this.shootTimer += deltaTime;
+            if (!this.aiming && this.shootTimer >= this.shootCooldown) {
+                this.aiming = true;
+                this.aimTimer = 0;
+                if (this.game.player) {
+                    this.aimTarget = {
+                        x: this.game.player.x + this.game.player.width / 2,
+                        y: this.game.player.y + this.game.player.height / 2
+                    };
+                }
+            }
+            if (this.aiming) {
+                this.aimTimer += deltaTime;
+                if (this.aimTimer >= this.aimDuration) {
+                    this.shoot();
+                    this.aiming = false;
+                    this.shootTimer = 0;
+                }
+            }
+        }
+        if (this.y > this.game.height + this.height) this.markedForDeletion = true;
+        if (this.flashTimer > 0) this.flashTimer -= deltaTime;
+    }
+
+    shoot() {
+        const cx = this.x + this.width / 2;
+        const cy = this.y + this.height / 2;
+        const dx = this.aimTarget.x - cx;
+        const dy = this.aimTarget.y - cy;
+        const dist = Math.hypot(dx, dy) || 1;
+        const speed = 10 * (this.game.getEnemyBulletSpeedMultiplier());
+        this.game.enemyBullets.push(new EnemyBullet(this.game, cx, cy, (dx / dist) * speed, (dy / dist) * speed));
+    }
+
+    draw(ctx) {
+        super.draw(ctx);
+        // Red tint
+        ctx.save();
+        ctx.globalAlpha = 0.3;
+        ctx.fillStyle = '#ff0044';
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+        ctx.restore();
+        // Laser sight when aiming
+        if (this.aiming && this.game.player) {
+            ctx.save();
+            const progress = this.aimTimer / this.aimDuration;
+            ctx.globalAlpha = 0.3 + progress * 0.5;
+            ctx.strokeStyle = '#ff0000';
+            ctx.lineWidth = 1 + progress * 2;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#ff0000';
+            ctx.beginPath();
+            ctx.moveTo(this.x + this.width / 2, this.y + this.height / 2);
+            ctx.lineTo(this.aimTarget.x, this.aimTarget.y);
+            ctx.stroke();
+            ctx.restore();
+        }
+    }
+}
+
+export class TeleportEnemy extends Enemy {
+    constructor(game, x, y) {
+        super(game, x, y);
+        this.type = 'teleport';
+        this.hp = 2;
+        this.maxHp = 2;
+        this.scoreValue = 4;
+        this.speedY = 0.5;
+        this.teleportTimer = 0;
+        this.teleportInterval = 2000 + Math.random() * 1000;
+        this.teleporting = false;
+        this.teleportFade = 1;
+    }
+
+    update(deltaTime) {
+        this.teleportTimer += deltaTime;
+        if (this.teleporting) {
+            this.teleportFade -= deltaTime / 200;
+            if (this.teleportFade <= 0) {
+                // Warp to new position
+                this.x = 20 + Math.random() * (this.game.width - this.width - 40);
+                this.y = 30 + Math.random() * (this.game.height * 0.4);
+                this.teleporting = false;
+                this.teleportFade = 0;
+                // Fade in
+                setTimeout(() => { this.teleportFade = 1; }, 100);
+            }
+        } else {
+            this.teleportFade = Math.min(1, this.teleportFade + deltaTime / 200);
+            this.y += this.speedY;
+            if (this.teleportTimer >= this.teleportInterval) {
+                this.teleportTimer = 0;
+                this.teleporting = true;
+            }
+        }
+        if (this.y > this.game.height + this.height) this.markedForDeletion = true;
+        if (this.flashTimer > 0) this.flashTimer -= deltaTime;
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, this.teleportFade);
+        if (this.image.complete && this.image.naturalWidth > 0) {
+            ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
+        } else {
+            ctx.fillStyle = '#8800ff';
+            ctx.fillRect(this.x, this.y, this.width, this.height);
+        }
+        // Purple shimmer
+        ctx.globalAlpha = Math.max(0, this.teleportFade) * 0.3;
+        ctx.fillStyle = '#aa00ff';
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+        ctx.restore();
+
+        if (this.flashTimer > 0) {
+            ctx.save();
+            ctx.globalAlpha = 0.4;
+            ctx.fillStyle = 'white';
+            ctx.fillRect(this.x, this.y, this.width, this.height);
+            ctx.restore();
+        }
+    }
+}
+
+export class BombEnemy extends Enemy {
+    constructor(game, x, y) {
+        super(game, x, y);
+        this.type = 'bomb';
+        this.hp = 1;
+        this.maxHp = 1;
+        this.scoreValue = 5;
+        this.speedY = 1.2;
+        this.speedX = (Math.random() - 0.5) * 2;
+    }
+
+    update(deltaTime) {
+        this.x += this.speedX;
+        this.y += this.speedY;
+        if (this.x < 0 || this.x + this.width > this.game.width) this.speedX *= -1;
+        if (this.y > this.game.height + this.height) this.markedForDeletion = true;
+        if (this.flashTimer > 0) this.flashTimer -= deltaTime;
+    }
+
+    takeDamage(amount) {
+        this.hp -= amount;
+        this.flashTimer = 100;
+        if (this.hp <= 0) {
+            // Explode: shoot bullets in all directions
+            const cx = this.x + this.width / 2;
+            const cy = this.y + this.height / 2;
+            const count = 8;
+            const speed = 3 * (this.game.getEnemyBulletSpeedMultiplier());
+            for (let i = 0; i < count; i++) {
+                const angle = (Math.PI * 2 / count) * i;
+                this.game.enemyBullets.push(new EnemyBullet(
+                    this.game, cx, cy,
+                    Math.cos(angle) * speed, Math.sin(angle) * speed
+                ));
+            }
+            return true;
+        }
+        return false;
+    }
+
+    draw(ctx) {
+        super.draw(ctx);
+        // Warning red pulse
+        ctx.save();
+        const pulse = Math.sin(performance.now() / 200) * 0.2 + 0.3;
+        ctx.globalAlpha = pulse;
+        ctx.fillStyle = '#ff4400';
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+        ctx.restore();
+        // Bomb icon
+        ctx.save();
+        ctx.fillStyle = '#ffdd00';
+        ctx.font = `bold ${Math.floor(this.width * 0.5)}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('!', this.x + this.width / 2, this.y + this.height / 2);
+        ctx.restore();
+    }
+}
+
+// ========== Enemy Quotes ==========
+
+export const ENEMY_QUOTES = {
+    basic: {
+        spawn: ['名刺はいかがですか？', '西谷さんに会えて光栄です', '笑顔は世界を救う'],
+        death: ['営業成績が…', '笑顔を…絶やすな…', '次の面談は…'],
+    },
+    zigzag: {
+        spawn: ['ジグザグ営業回り中！', '効率的なルートで参ります'],
+        death: ['ルートが…途切れた…', 'GPS壊れた…'],
+    },
+    kamikaze: {
+        spawn: ['西谷さんのためなら！', '突撃営業ぃぃ！', '契約取れるまで帰れません！'],
+        death: ['本望です…', '西谷さぁぁん…'],
+    },
+    shooter: {
+        spawn: ['遠距離からでも笑顔は届く', '名刺ミサイル発射！'],
+        death: ['射程外だと…', '弾切れ…'],
+    },
+    tank: {
+        spawn: ['重厚な営業力を見よ', '石橋を叩いて渡る営業スタイル'],
+        death: ['この重厚さが…通じないとは…', '重すぎた…'],
+    },
+    swarm: {
+        spawn: ['数の暴力ならぬ数の営業', '集団面接を思い出す'],
+        death: ['仲間がー！', 'ちっちゃくてもプライドはある'],
+    },
+    shield: {
+        spawn: ['クレーム対応力には自信がある', '防御は最大の営業'],
+        death: ['シールドが…', 'クレーム処理しきれなかった…'],
+    },
+    meishi: {
+        spawn: ['名刺交換しましょう！', '弊社をよろしく'],
+        death: ['名刺が…散った…', '印刷代が…'],
+    },
+    clone: {
+        spawn: ['コピーは本物を超える', '量産型の方が生産性高い'],
+        death: ['オリジナルに…報告を…', '複製エラー…'],
+    },
+    sniper: {
+        spawn: ['狙い撃ちの営業だ', 'ターゲットロック…'],
+        death: ['照準が…ズレた…', '外した…'],
+    },
+    teleport: {
+        spawn: ['どこにでも行ける営業マン', '瞬間移動で即訪問'],
+        death: ['テレポート…失敗…', '転送先が…ない…'],
+    },
+    bomb: {
+        spawn: ['爆発的な営業力！', '自爆覚悟で契約を取る！'],
+        death: ['道連れだ！', 'さよなら…ボーナス…'],
+    },
+};
+
 export function createEnemy(type, game, x, y) {
     switch (type) {
         case 'basic': return new Enemy(game, x, y);
@@ -409,6 +680,9 @@ export function createEnemy(type, game, x, y) {
         case 'shield': return new ShieldEnemy(game, x, y);
         case 'meishi': return new MeishiEnemy(game, x, y);
         case 'clone': return new CloneEnemy(game, x, y);
+        case 'sniper': return new SniperEnemy(game, x, y);
+        case 'teleport': return new TeleportEnemy(game, x, y);
+        case 'bomb': return new BombEnemy(game, x, y);
         default: return new Enemy(game, x, y);
     }
 }
